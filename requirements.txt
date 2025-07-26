@@ -1,0 +1,5 @@
+fastapi[all]
+motor
+passlib
+python-jose[cryptography]
+python-multipart
