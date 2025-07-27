@@ -1,16 +1,19 @@
+# core/security.py
 from datetime import datetime, timedelta
-from typing import Optional
-
+from typing import Optional, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from .config import settings
-from .database import get_db_context, AppContext
+
+# --- FIX: Use TYPE_CHECKING to prevent circular import at runtime ---
+if TYPE_CHECKING:
+    from components.users import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token") # Points to the user component's login route
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -28,7 +31,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db_ctx: AppContext = Depends(get_db_context)):
+# The return type annotation '-> "User"' uses a forward reference string
+# This is another way to avoid direct imports at the top level.
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> "User":
+    # --- FIX: Import User model here, inside the function scope ---
+    from components.users import User
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -41,8 +49,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db_ctx: AppConte
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    user = await db_ctx.users_collection.find_one({"username": username})
+
+    user = await User.find_one(User.username == username)
     if user is None:
         raise credentials_exception
     return user

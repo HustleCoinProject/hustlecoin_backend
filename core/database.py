@@ -1,20 +1,21 @@
+# core/database.py
 import motor.motor_asyncio
+from beanie import init_beanie
 from .config import settings
 
-class AppContext:
-    """A context class to hold database collections and other shared resources."""
-    def __init__(self):
-        self.client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_DETAILS)
-        self.db = self.client[settings.DATABASE_NAME]
+async def init_db():
+    """Initializes the Beanie ODM and database connection."""
+    
+    # --- FIX: Import models inside the function to avoid circular imports at startup ---
+    from components.users import User
+    from components.quizzes import Quiz
 
-        # Each component will register its collection here
-        self.users_collection = self.db.get_collection("users")
-        self.quizzes_collection = self.db.get_collection("quizzes")
-        self.transactions_collection = self.db.get_collection("transactions")
-
-# Create a single instance that will be shared across the application
-db_context = AppContext()
-
-# Dependency to provide the context to endpoints
-async def get_db_context():
-    return db_context
+    client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_DETAILS)
+    await init_beanie(
+        database=client.get_default_database(),
+        document_models=[
+            User,
+            Quiz,
+            # Add other Beanie models here as you create them
+        ]
+    )

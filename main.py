@@ -1,20 +1,27 @@
+# main.py
 from fastapi import FastAPI
-from components import users, tasks, quizzes, leaderboard # Import the component routers
+from core.database import init_db
+from components import users, tasks, quizzes, leaderboard
 
 app = FastAPI(
-    title="HustleCoin Backend",
-    description="A modular backend where features are self-contained components.",
-    version="1.0.0"
+    title="HustleCoin Backend (Beanie Edition)",
+    description="A clean, modular backend using FastAPI and Beanie ODM.",
+    version="2.0.0"
 )
 
+@app.on_event("startup")
+async def on_startup():
+    """Connect to the database when the app starts."""
+    print("Initializing database connection...")
+    await init_db()
+    print("Database connection successful.")
+
 # --- Include Component Routers ---
-# This is the "additive" part. To add a new feature, you just add its router here.
-# To remove a feature, you comment out or delete its line.
 app.include_router(users.router)
 app.include_router(tasks.router)
-# app.include_router(quizzes.router) # Example: quizzes are not ready, so we comment it out
-# app.include_router(leaderboard.router)
+app.include_router(quizzes.router)
+app.include_router(leaderboard.router)
 
 @app.get("/", tags=["Root"])
 async def read_root():
-    return {"message": "Welcome to the HustleCoin API!"}
+    return {"message": "Welcome to the HustleCoin API v2!"}

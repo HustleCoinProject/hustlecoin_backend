@@ -1,5 +1,6 @@
 fastapi[all]
 motor
+beanie
 passlib
 python-jose[cryptography]
 python-multipart
