@@ -1,14 +1,30 @@
+
+# TODO: User model doesnt return all fields, fix this (/users/me)
+
+
+
 # components/users.py
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 from beanie import Document, PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from typing import Dict, List
 
 from core.security import (create_access_token, get_current_user,
                            get_password_hash, verify_password)
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
+
+
+# Inventory for items like boosters, etc. for shop
+class InventoryItem(BaseModel):
+    """Represents a single item in a user's inventory."""
+    item_id: str
+    quantity: int = 1
+    purchased_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime | None = None # For timed boosters
+
 
 # --- Beanie Document Model ---
 class User(Document):
@@ -16,9 +32,13 @@ class User(Document):
     email: EmailStr = Field(..., unique=True)
     hashed_password: str
     hc_balance: int = 0
+    inventory: List[InventoryItem] = Field(default_factory=list)
     level: int = 1
+    current_hustle: str = "Street Vendor" # Default starting hustle
+    level_entry_date: datetime = Field(default_factory=datetime.utcnow)
+    hc_earned_in_level: int = 0
     language: str = "en"
-    lastDailyTap: datetime | None = None
+    task_cooldowns: Dict[str, datetime] = Field(default_factory=dict) # e.g., {"daily_tap": datetime.utcnow()}
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
@@ -56,7 +76,7 @@ async def register_user(user_data: UserRegister):
     await user.create()
     return user
 
-@router.post("/token", response_model=Token)
+@router.post("/login", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await User.find_one(User.username == form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):

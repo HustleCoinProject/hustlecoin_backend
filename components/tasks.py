@@ -1,40 +1,297 @@
 # components/tasks.py
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from beanie.operators import Set, Inc
+from typing import List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from beanie import Document, PydanticObjectId
+from beanie.operators import Inc, Set
 
 from core.security import get_current_user
-from components.users import User
+from .users import User
 
-router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
+router = APIRouter(prefix="/api/tasks", tags=["Tasks & Quizzes"])
 
-# --- DTOs ---
+# --- Task Configuration ---
+# This dictionary defines all available tasks, their rewards, and cooldowns in seconds.
+# 'type' can be 'INSTANT' (like watching an ad) or 'QUIZ'.
+TASK_CONFIG = {
+    "watch_ad": {"reward": 100, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
+    "daily_tap": {"reward": 50, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
+    "quiz_game": {"reward": 75, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
+}
+
+# --- Beanie Document Model for Quizzes ---
+class Quiz(Document):
+    question_pt: str
+    question_en: str
+    options_pt: List[str]
+    options_en: List[str]
+    correctAnswerIndex: int
+    isActive: bool = True
+
+    class Settings:
+        name = "quizzes" # This collection will still exist
+
+# --- DTOs (Data Transfer Objects) ---
+class TaskInfo(BaseModel):
+    task_id: str
+    description: str
+    reward: int
+    type: str
+    cooldown_seconds: int
+
+class TaskComplete(BaseModel):
+    task_id: str
+    # For quizzes, this payload will contain the answer
+    payload: Dict[str, Any] | None = None
+
 class BalanceUpdateResponse(BaseModel):
     message: str
     new_balance: int
 
+class QuizQuestionResponse(BaseModel):
+    quizId: PydanticObjectId
+    question: str
+    options: List[str]
+
 # --- Endpoints ---
-@router.post("/claim/ad-reward", response_model=BalanceUpdateResponse)
-async def claim_ad_reward(current_user: User = Depends(get_current_user)):
-    REWARD_AMOUNT = 100
-    await current_user.update(Inc({User.hc_balance: REWARD_AMOUNT}))
-    return {
-        "message": "Reward claimed successfully",
-        "new_balance": current_user.hc_balance + REWARD_AMOUNT
-    }
 
-@router.post("/claim/daily-tap", response_model=BalanceUpdateResponse)
-async def claim_daily_tap(current_user: User = Depends(get_current_user)):
-    REWARD_AMOUNT = 50
-    if current_user.lastDailyTap and datetime.utcnow() < current_user.lastDailyTap + timedelta(hours=24):
-        raise HTTPException(status_code=429, detail="Daily tap already claimed.")
 
-    await current_user.update(
-        Set({User.lastDailyTap: datetime.utcnow()}),
-        Inc({User.hc_balance: REWARD_AMOUNT})
+
+@router.get("/all", response_model=List[TaskInfo])
+async def get_all_tasks():
+    """Lists all available task types in the game."""
+    task_list = []
+    for task_id, config in TASK_CONFIG.items():
+        task_list.append(TaskInfo(task_id=task_id, **config))
+    return task_list
+
+
+
+@router.post("/complete", response_model=BalanceUpdateResponse)
+async def complete_task(
+    completion_data: TaskComplete,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    A generic endpoint to mark a task as completed and claim a reward.
+    The logic is determined by the task_id.
+    """
+    task_id = completion_data.task_id
+    config = TASK_CONFIG.get(task_id)
+
+    if not config:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # --- Cooldown Check ---
+    last_completed = current_user.task_cooldowns.get(task_id)
+    if last_completed and datetime.utcnow() < last_completed + timedelta(seconds=config["cooldown_seconds"]):
+        raise HTTPException(status_code=429, detail="Task is on cooldown. Try again later.")
+
+    reward_amount = 0
+
+    # --- Task-specific Logic ---
+    if task_id == "watch_ad":
+        reward_amount = config["reward"]
+        # In a real app, you might have server-to-server ad validation logic here
+        
+    elif task_id == "daily_tap":
+        reward_amount = config["reward"]
+
+    elif task_id == "quiz_game":
+        # This task type requires a payload with the quiz answer
+        payload = completion_data.payload
+        if not payload or "quizId" not in payload or "answerIndex" not in payload:
+            raise HTTPException(status_code=400, detail="Must have payload with quizId and answerIndex")
+        
+        quiz = await Quiz.get(PydanticObjectId(payload["quizId"]))
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        if quiz.correctAnswerIndex == payload["answerIndex"]:
+            reward_amount = config["reward"]
+        else:
+            # If wrong, update cooldown but give no reward and return a specific message
+            await current_user.update(Set({f"task_cooldowns.{task_id}": datetime.utcnow()}))
+            raise HTTPException(status_code=400, detail="Incorrect answer. No reward given.")
+            
+    else:
+        raise HTTPException(status_code=400, detail="Unknown task completion logic.")
+
+    # --- Grant Reward and Update Cooldown ---
+    if reward_amount > 0:
+        await current_user.update(
+            Inc({User.hc_balance: reward_amount, User.hc_earned_in_level: reward_amount}),
+            Set({f"task_cooldowns.{task_id}": datetime.utcnow()})
+        )
+
+    return BalanceUpdateResponse(
+        message=f"Task '{task_id}' completed successfully!",
+        new_balance=current_user.hc_balance
     )
-    return {
-        "message": "Daily tap claimed!",
-        "new_balance": current_user.hc_balance + REWARD_AMOUNT
-    }
+
+
+
+
+# DOCS: Uses PyMongo here directly due to a bug that Motor/Beanie
+#      has version mis-match with PyMongo. Bug is in Beanie or Motor.
+@router.get("/quiz/fetch", response_model=QuizQuestionResponse)
+async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
+    """Fetches a random quiz question for the quiz_game task."""
+    user_lang = current_user.language
+
+    # --- FIX START ---
+
+    # 1. Get the underlying pymongo collection from the Beanie model
+    #    using the correct method name from your traceback.
+    collection = Quiz.get_pymongo_collection()
+
+    # 2. Define the aggregation pipeline
+    pipeline = [{"$match": {"isActive": True}}, {"$sample": {"size": 1}}]
+
+    # 3. Create the cursor. Note there is NO `await` here. This returns
+    #    the AsyncIOMotorLatentCommandCursor object.
+    cursor = collection.aggregate(pipeline)
+
+    # 4. Await the .to_list() method on the cursor to fetch the data.
+    #    This is the part that is actually awaitable.
+    random_quiz_list = await cursor.to_list(length=1)
+
+    if not random_quiz_list:
+        raise HTTPException(status_code=404, detail="No active quizzes found.")
+
+    # The result is a list, so we get the first element
+    quiz_doc = random_quiz_list[0]
+
+    return QuizQuestionResponse(
+        quizId=quiz_doc["_id"],
+        question=quiz_doc.get(f"question_{user_lang}", quiz_doc["question_en"]),
+        options=quiz_doc.get(f"options_{user_lang}", quiz_doc["options_en"])
+    )
+
+
+
+
+@router.post("/dev/seed-quiz", include_in_schema=False)
+async def seed_quiz_data():
+    """Endpoint to add a sample quiz to the DB. Not for production."""
+    await Quiz.delete_all()
+    sample_quiz = Quiz(
+        question_pt="Qual é a capital de Angola?", question_en="What is the capital of Angola?",
+        options_pt=["Luanda", "Huambo"], options_en=["Luanda", "Huambo"],
+        correctAnswerIndex=0, isActive=True
+    )
+    await sample_quiz.create()
+    return {"message": "Sample quiz seeded successfully."}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+CODE SNIPPET SHOWING HOW INVENTORY BOOSTERS CAN BE APPLIED..
+INVENTORY = PURCHASED ITEMS OF USER, SUCH AS BOOSTERS
+
+
+
+# components/tasks.py
+# ... (imports)
+
+async def apply_inventory_boosters(user: User, base_reward: int) -> int:
+    final_reward = base_reward
+    active_multiplier = 1
+
+    # Filter for active, non-expired boosters
+    active_boosters = [
+        item for item in user.inventory 
+        if item.item_id == "double_hc_booster_1hr" and (
+            item.expires_at is None or item.expires_at > datetime.utcnow()
+        )
+    ]
+    
+    if active_boosters:
+        # In a more complex system, you might stack multipliers. Here we just find the highest.
+        # For this example, we'll just assume the 2x booster exists.
+        active_multiplier = 2 # This would come from the item's metadata
+    
+    final_reward *= active_multiplier
+    return final_reward
+
+# ... (router definition)
+
+@router.post("/complete", response_model=BalanceUpdateResponse)
+async def complete_task(
+    completion_data: TaskComplete,
+    current_user: User = Depends(get_current_user)
+):
+    # ... (code to get task_id and config, and check cooldown) ...
+
+    base_reward = 0
+    
+    # --- Task-specific Logic to determine BASE reward ---
+    if completion_data.task_id in ["watch_ad", "daily_tap"]:
+        base_reward = config["reward"]
+    elif completion_data.task_id == "quiz_game":
+        # ... (logic to check quiz answer)
+        if quiz.correctAnswerIndex == payload["answerIndex"]:
+            base_reward = config["reward"]
+        else:
+            # ... (handle incorrect answer)
+    # ...
+
+    # --- Apply Boosters and Grant Final Reward ---
+    if base_reward > 0:
+        final_reward = await apply_inventory_boosters(current_user, base_reward)
+        
+        await current_user.update(
+            Inc({User.hc_balance: final_reward, User.hc_earned_in_level: final_reward}),
+            Set({f"task_cooldowns.{completion_data.task_id}": datetime.utcnow()})
+        )
+
+        return BalanceUpdateResponse(
+            message=f"Task '{completion_data.task_id}' completed! You earned {final_reward} HC.",
+            new_balance=current_user.hc_balance + final_reward
+        )
+    
+    # Fallback if no reward was earned
+    raise HTTPException(status_code=400, detail="Task could not be completed for a reward.")
+
+"""
