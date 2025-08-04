@@ -1,99 +1,99 @@
 # flyctl launch added from .gitignore
 # Byte-compiled / optimized / DLL files
-**\__pycache__
-**\*.py[cod]
-**\*$py.class
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
 
 # C extensions
-**\*.so
+**/*.so
 
 # Distribution / packaging
-**\.Python
-**\build
-**\develop-eggs
-**\dist
-**\downloads
-**\eggs
-**\.eggs
-**\lib
-**\lib64
-**\parts
-**\sdist
-**\var
-**\*.egg-info
-**\.installed.cfg
-**\*.egg
+**/.Python
+**/build
+**/develop-eggs
+**/dist
+**/downloads
+**/eggs
+**/.eggs
+**/lib
+**/lib64
+**/parts
+**/sdist
+**/var
+**/*.egg-info
+**/.installed.cfg
+**/*.egg
 
 # Virtual environment
-**\venv
-**\env
-**\ENV
-**\.venv
-**\.ENV
-**\env.bak
-**\venv.bak
+**/venv
+**/env
+**/ENV
+**/.venv
+**/.ENV
+**/env.bak
+**/venv.bak
 
 # PyInstaller
-# Usually contains pyc and executable
-**\*.manifest
-**\*.spec
+**/*.manifest
+**/*.spec
 
 # Unit test / coverage reports
-**\htmlcov
-**\.tox
-**\.nox
-**\.coverage
-**\.coverage.*
-**\.cache
-**\nosetests.xml
-**\coverage.xml
-**\*.cover
-**\*.py,cover
+**/htmlcov
+**/.tox
+**/.nox
+**/.coverage
+**/.coverage.*
+**/.cache
+**/nosetests.xml
+**/coverage.xml
+**/*.cover
+**/*.py,cover
 
 # Jupyter Notebook
-**\.ipynb_checkpoints
+**/.ipynb_checkpoints
 
 # PyCharm
-**\.idea
+**/.idea
 
 # VS Code
-**\.vscode
+**/.vscode
 
 # MyPy
-**\.mypy_cache
-**\.dmypy.json
-**\dmypy.json
+**/.mypy_cache
+**/.dmypy.json
+**/dmypy.json
 
 # Pyre
-**\.pyre
+**/.pyre
 
 # pytype
-**\.pytype
+**/.pytype
 
 # profiling
-**\profiler_output
+**/profiler_output
 
 # Mac and Linux
-**\.DS_Store
-**\.cache
-**\*.swp
+**/.DS_Store
+**/.cache
+**/*.swp
 
 # Windows
-**\Thumbs.db
-**\ehthumbs.db
-**\Desktop.ini
+**/Thumbs.db
+**/ehthumbs.db
+**/Desktop.ini
 
 # Logs
-**\*.log
+**/*.log
 
 # dotenv
-**\.env
-**\.env.*
+**/.env
+**/.env.*
 
 # local settings
-**\local_settings.py
+**/local_settings.py
 
 # SQLite database
-**\*.sqlite3
-**\*.db
+**/*.sqlite3
+**/*.db
+
 fly.toml
