@@ -1,6 +1,6 @@
 @echo off
-echo Starting FastAPI server...
-uvicorn main:app --reload
+echo Starting Dev FastAPI server...
+uvicorn app:app --reload
 
 if %errorlevel% neq 0 (
     echo.

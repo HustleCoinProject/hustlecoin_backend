@@ -1,5 +1,5 @@
 @echo off
-echo Installing Python dependencies from requirements.txt...
+echo Installing Dev Python dependencies from requirements.txt...
 pip install -r requirements.txt
 
 if %errorlevel% neq 0 (
