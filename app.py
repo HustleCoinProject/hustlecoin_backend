@@ -1,4 +1,4 @@
-# main.py
+# app.py
 from fastapi import FastAPI
 from core.database import init_db
 from components import users, tasks, leaderboard, hustles, shop
