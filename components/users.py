@@ -1,8 +1,3 @@
-
-# TODO: User model doesnt return all fields, fix this (/users/me)
-
-
-
 # components/users.py
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
@@ -49,8 +44,14 @@ class UserOut(BaseModel):
     id: PydanticObjectId
     username: str
     email: EmailStr
-    hc_balance: int
-    level: int
+    hc_balance: int = 0
+    level: int = 1
+    current_hustle: str
+    level_entry_date: datetime
+    hc_earned_in_level: int
+    language: str
+    task_cooldowns: Dict[str, datetime]
+    createdAt: datetime
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -60,6 +61,8 @@ class UserRegister(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
 
 # --- Endpoints ---
 @router.post("/register", response_model=UserOut, status_code=201)
@@ -76,6 +79,8 @@ async def register_user(user_data: UserRegister):
     await user.create()
     return user
 
+
+
 @router.post("/login", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await User.find_one(User.username == form_data.username)
@@ -85,6 +90,24 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
+
+
 @router.get("/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+
+@router.get("/inventory", response_model=List[InventoryItem])
+async def get_user_inventory(current_user: User = Depends(get_current_user)):
+    """
+    Views the current user's inventory of purchased items.
+    This endpoint also filters out any expired items before returning them.
+    """
+    now = datetime.utcnow()
+    # Filter inventory to only include items that have not expired.
+    active_inventory = [
+        item for item in current_user.inventory
+        if not item.expires_at or item.expires_at > now
+    ]
+    return active_inventory

@@ -1,44 +1,112 @@
-
-# TODO: Delete items in inventory if expired/used-up
-
-
-
 # components/shop.py
 from datetime import datetime, timedelta
-from typing import List, Literal
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from beanie import Document, PydanticObjectId
 from beanie.operators import Inc, Push
 
 from core.security import get_current_user
 from components.users import User, InventoryItem
 
+
+
+
+# components/shop_config.py
+
+"""
+This file serves as the static configuration for all items available in the shop.
+The shop's endpoints will read directly from this configuration instead of a database.
+This makes managing shop items as simple as editing this file.
+
+The dictionary key is the unique 'item_id', which is used for lookups.
+"""
+
+SHOP_ITEMS_CONFIG = {
+    # --- Spells (Boosters) ---
+    "speed_hustle": {
+        "item_id": "speed_hustle", "name": "Speed Hustle", "price": 60,
+        "description": "Completes all of your tasks 2x faster.",
+        "item_type": "BOOSTER",
+        "metadata": {"effect": "task_speed_multiplier", "value": 2, "duration_seconds": 7200} # 2 hours
+    },
+    "double_coins": {
+        "item_id": "double_coins", "name": "Double Coins", "price": 100,
+        "description": "Doubles the HustleCoin (HC) you earn from tasks.",
+        "item_type": "BOOSTER",
+        "metadata": {"effect": "hc_multiplier", "value": 2, "duration_seconds": 3600} # 1 hour
+    },
+    "power_prestige": {
+        "item_id": "power_prestige", "name": "Power Prestige", "price": 200,
+        "description": "Increases Rank Point gains by 50% to help you climb the leaderboards.",
+        "item_type": "BOOSTER",
+        "metadata": {"effect": "rank_point_multiplier", "value": 1.5, "duration_seconds": 86400} # 1 day
+    },
+    "hustler_brain": {
+        "item_id": "hustler_brain", "name": "Hustler Brain", "price": 90,
+        "description": "Reduces the cooldown on your tasks by 50%.",
+        "item_type": "BOOSTER",
+        "metadata": {"effect": "cooldown_reduction_percentage", "value": 50, "duration_seconds": 14400} # 4 hours
+    },
+    "land_multiplier": {
+        "item_id": "land_multiplier", "name": "Land Multiplier", "price": 250,
+        "description": "Boosts your passive land income by 100%.",
+        "item_type": "BOOSTER",
+        "metadata": {"effect": "land_income_multiplier", "value": 2, "duration_seconds": 259200} # 3 days
+    },
+    # --- Special Items ---
+    "safe_lock_recharger": {
+        "item_id": "safe_lock_recharger", "name": "Safe Lock Recharger", "price": 80,
+        "description": "Instantly adds 5% to the community Safe Luck Fund.",
+        "item_type": "SPECIAL",
+        "metadata": {"effect": "add_to_safe_luck_fund", "value_percentage": 5} # Instant
+    },
+    # --- Bundles ---
+    "combo_boost_pack": {
+        "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 300,
+        "description": "A high-value bundle containing Speed Hustle, Double Coins, and Power Prestige.",
+        "item_type": "BUNDLE",
+        "metadata": {"contains": ["speed_hustle", "double_coins", "power_prestige"]}
+    },
+    # --- Access Keys ---
+    "bronze_key": {
+        "item_id": "bronze_key", "name": "Bronze Key", "price": 100,
+        "description": "Unlocks access to basic spells, land, and boosters.",
+        "item_type": "ACCESS_KEY",
+        "metadata": {"access_level": "bronze", "duration_seconds": 259200} # 3 days
+    },
+    "silver_key": {
+        "item_id": "silver_key", "name": "Silver Key", "price": 250,
+        "description": "Unlocks rare spells, all lands, and special events.",
+        "item_type": "ACCESS_KEY",
+        "metadata": {"access_level": "silver", "duration_seconds": 604800} # 7 days
+    },
+    "gold_key": {
+        "item_id": "gold_key", "name": "Gold Key", "price": 500,
+        "description": "Unlocks VIP tasks and ranking boards.",
+        "item_type": "ACCESS_KEY",
+        "metadata": {"access_level": "gold", "duration_seconds": 1296000} # 15 days
+    },
+    "platinum_key": {
+        "item_id": "platinum_key", "name": "Platinum Key", "price": 900,
+        "description": "Grants full access to all features and VIP bonuses.",
+        "item_type": "ACCESS_KEY",
+        "metadata": {"access_level": "platinum", "duration_seconds": 2592000} # 30 days
+    },
+    "permanent_key": {
+        "item_id": "permanent_key", "name": "Permanent Key", "price": 10000,
+        "description": "Grants lifetime full access and an elite title.",
+        "item_type": "ACCESS_KEY",
+        "metadata": {"access_level": "permanent", "title": "Elite"} # Forever
+    }
+}
+
+
+
 router = APIRouter(prefix="/api/shop", tags=["Shop & Inventory"])
 
-# --- Beanie Document Model for Shop Items ---
-class ShopItem(Document):
-    """Defines an item available for purchase in the shop."""
-    item_id: str = Field(..., unique=True) # A unique string identifier, e.g., "double_hc_booster_1hr"
-    name: str
-    description: str
-    price: int # Cost in HustleCoin (HC)
-    
-    # Type of item determines its effect
-    item_type: Literal["BOOSTER", "DECORATION", "SPECIAL"] = "SPECIAL"
-    
-    # Effect-specific metadata
-    # For a BOOSTER, this could define the multiplier and duration
-    # For a DECORATION, this could be an image URL
-    metadata: dict = Field(default_factory=dict)
-    
-    is_active: bool = True # To easily enable/disable items in the shop
-
-    class Settings:
-        name = "shop_items"
-
-
 # --- DTOs (Data Transfer Objects) ---
+# This model defines the structure of a shop item sent to the client.
+# It matches the structure of the items in SHOP_ITEMS_CONFIG.
 class ShopItemOut(BaseModel):
     item_id: str
     name: str
@@ -49,23 +117,17 @@ class ShopItemOut(BaseModel):
 
 class PurchaseRequest(BaseModel):
     item_id: str
-    quantity: int = 1
+    quantity: int = Field(default=1, gt=0)
 
 # --- Endpoints ---
 
 
 @router.get("/items", response_model=List[ShopItemOut])
 async def list_shop_items():
-    """Lists all active items available for purchase."""
-    items = await ShopItem.find(ShopItem.is_active == True).to_list()
-    return items
+    """Lists all active items available for purchase from the static config."""
+    # We simply return all the items defined in our configuration dictionary.
+    return list(SHOP_ITEMS_CONFIG.values())
 
-
-
-@router.get("/user/inventory", response_model=List[InventoryItem])
-async def get_user_inventory(current_user: User = Depends(get_current_user)):
-    """Views the current user's inventory of purchased items."""
-    return current_user.inventory
 
 
 
@@ -74,69 +136,54 @@ async def purchase_item(
     purchase_data: PurchaseRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Purchases an item from the shop."""
-    item_to_buy = await ShopItem.find_one(ShopItem.item_id == purchase_data.item_id, ShopItem.is_active == True)
+    """Purchases an item by validating against the static shop config."""
+    # Look up the item in our config dictionary instead of the database.
+    item_data = SHOP_ITEMS_CONFIG.get(purchase_data.item_id)
     
-    if not item_to_buy:
+    if not item_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found or unavailable.")
+    
+    # Use the ShopItemOut model to easily access item properties
+    item_to_buy = ShopItemOut(**item_data)
         
     total_cost = item_to_buy.price * purchase_data.quantity
     
     if current_user.hc_balance < total_cost:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin.")
 
-    # --- Create the inventory item entry ---
+    # --- Handle special instant-effect items that aren't added to inventory ---
+    if item_to_buy.item_type == "SPECIAL" and item_to_buy.item_id == "safe_lock_recharger":
+        # TODO: Implement the logic to apply this instant effect (e.g., update a global state).
+        await current_user.update(Inc({User.hc_balance: -total_cost}))
+        return {
+            "message": f"Successfully activated {item_to_buy.name}!",
+            "new_balance": current_user.hc_balance - total_cost
+        }
+    
+    # --- TODO: Handle BUNDLE item type ---
+    if item_to_buy.item_type == "BUNDLE":
+        # Logic for bundles: fetch items from metadata and add them individually.
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Bundle purchases are not yet implemented.")
+
+    # --- Create the inventory item entry for all other items ---
     new_inventory_item = InventoryItem(
         item_id=item_to_buy.item_id,
-        quantity=purchase_data.quantity
+        quantity=purchase_data.quantity,
+        purchased_at=datetime.utcnow()
     )
     
-    # Handle timed boosters
-    if item_to_buy.item_type == "BOOSTER" and "duration_seconds" in item_to_buy.metadata:
+    # Handle timed items by checking for duration in metadata
+    if "duration_seconds" in item_to_buy.metadata:
         duration = timedelta(seconds=item_to_buy.metadata["duration_seconds"])
         new_inventory_item.expires_at = datetime.utcnow() + duration
         
-    # --- Perform atomic update ---
+    # --- Perform atomic update to deduct cost and add item to user's DB document ---
     await current_user.update(
         Inc({User.hc_balance: -total_cost}),
-        Push({User.inventory: new_inventory_item.model_dump()}) # Use model_dump for sub-documents
+        Push({User.inventory: new_inventory_item.model_dump()})
     )
     
     return {
         "message": f"Successfully purchased {purchase_data.quantity} x {item_to_buy.name}!",
         "new_balance": current_user.hc_balance - total_cost
     }
-
-
-
-@router.post("/dev/seed-items", include_in_schema=False)
-async def seed_shop_items():
-    """Endpoint to add sample items to the DB. Not for production."""
-    await ShopItem.delete_all()
-    items_to_seed = [
-        ShopItem(
-            item_id="double_hc_booster_1hr",
-            name="Double HC Booster (1 Hour)",
-            description="Earn 2x HustleCoin from all tasks for one hour.",
-            price=1000,
-            item_type="BOOSTER",
-            metadata={"multiplier": 2, "duration_seconds": 3600}
-        ),
-        ShopItem(
-            item_id="presidential_desk_decoration",
-            name="Presidential Desk",
-            description="A purely cosmetic item to show off your status.",
-            price=50000,
-            item_type="DECORATION",
-            metadata={"image_url": "https/example.com/desk.png"}
-        ),
-        ShopItem(
-            item_id="one_time_hc_pack",
-            name="HC Starter Pack",
-            description="A special one-time purchase item (logic not implemented yet).",
-            price=200,
-            item_type="SPECIAL"
-        ),
-    ]
-    await ShopItem.insert_many(items_to_seed)
-    return {"message": f"{len(items_to_seed)} shop items seeded successfully."}

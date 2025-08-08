@@ -88,6 +88,8 @@
 # dotenv
 **/.env
 **/.env.*
+.env
+*.env
 
 # local settings
 **/local_settings.py

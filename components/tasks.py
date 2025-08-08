@@ -18,6 +18,9 @@ TASK_CONFIG = {
     "watch_ad": {"reward": 100, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 75, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
+
+    # A quick tap to increment coin by 1, no cooldown
+    "quick_tap": {"reward": 1, "cooldown_seconds": 0, "type": "INSTANT", "description": "Quick tap for 1 HC"},
 }
 
 # --- Beanie Document Model for Quizzes ---
@@ -32,6 +35,7 @@ class Quiz(Document):
     class Settings:
         name = "quizzes" # This collection will still exist
 
+
 # --- DTOs (Data Transfer Objects) ---
 class TaskInfo(BaseModel):
     task_id: str
@@ -40,14 +44,17 @@ class TaskInfo(BaseModel):
     type: str
     cooldown_seconds: int
 
+
 class TaskComplete(BaseModel):
     task_id: str
     # For quizzes, this payload will contain the answer
     payload: Dict[str, Any] | None = None
 
+
 class BalanceUpdateResponse(BaseModel):
     message: str
     new_balance: int
+
 
 class QuizQuestionResponse(BaseModel):
     quizId: PydanticObjectId
@@ -58,6 +65,7 @@ class QuizQuestionResponse(BaseModel):
 
 
 
+
 @router.get("/all", response_model=List[TaskInfo])
 async def get_all_tasks():
     """Lists all available task types in the game."""
@@ -65,6 +73,7 @@ async def get_all_tasks():
     for task_id, config in TASK_CONFIG.items():
         task_list.append(TaskInfo(task_id=task_id, **config))
     return task_list
+
 
 
 
@@ -114,7 +123,10 @@ async def complete_task(
             # If wrong, update cooldown but give no reward and return a specific message
             await current_user.update(Set({f"task_cooldowns.{task_id}": datetime.utcnow()}))
             raise HTTPException(status_code=400, detail="Incorrect answer. No reward given.")
-            
+
+    elif task_id == "quick_tap":
+        # This task simply gives a small reward without cooldown
+        reward_amount = config["reward"]
     else:
         raise HTTPException(status_code=400, detail="Unknown task completion logic.")
 
@@ -129,6 +141,7 @@ async def complete_task(
         message=f"Task '{task_id}' completed successfully!",
         new_balance=current_user.hc_balance
     )
+
 
 
 
@@ -172,126 +185,67 @@ async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# --- DTOs for Quiz Seeding ---
+class QuizSeedItem(BaseModel):
+    """Represents a single quiz question to be seeded."""
+    question_pt: str
+    question_en: str
+    options_pt: List[str]
+    options_en: List[str]
+    correctAnswerIndex: int
+
+class QuizSeedPayload(BaseModel):
+    """The payload for the seed-quiz endpoint, containing a list of quizzes."""
+    quizzes: List[QuizSeedItem]
+
+
 @router.post("/dev/seed-quiz", include_in_schema=False)
-async def seed_quiz_data():
-    """Endpoint to add a sample quiz to the DB. Not for production."""
-    await Quiz.delete_all()
-    sample_quiz = Quiz(
-        question_pt="Qual é a capital de Angola?", question_en="What is the capital of Angola?",
-        options_pt=["Luanda", "Huambo"], options_en=["Luanda", "Huambo"],
-        correctAnswerIndex=0, isActive=True
-    )
-    await sample_quiz.create()
-    return {"message": "Sample quiz seeded successfully."}
+async def seed_quiz_data(payload: QuizSeedPayload):
+    """
+    Endpoint to add multiple quizzes to the DB from a dictionary payload.
+    It checks for duplicate questions (based on 'question_en') and skips them.
+    Not for production use.
+    """
+    added_count = 0
+    skipped_count = 0
 
+    for quiz_data in payload.quizzes:
+        # Check if a quiz with the same English question already exists
+        existing_quiz = await Quiz.find_one({"question_en": quiz_data.question_en})
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-CODE SNIPPET SHOWING HOW INVENTORY BOOSTERS CAN BE APPLIED..
-INVENTORY = PURCHASED ITEMS OF USER, SUCH AS BOOSTERS
-
-
-
-# components/tasks.py
-# ... (imports)
-
-async def apply_inventory_boosters(user: User, base_reward: int) -> int:
-    final_reward = base_reward
-    active_multiplier = 1
-
-    # Filter for active, non-expired boosters
-    active_boosters = [
-        item for item in user.inventory 
-        if item.item_id == "double_hc_booster_1hr" and (
-            item.expires_at is None or item.expires_at > datetime.utcnow()
-        )
-    ]
-    
-    if active_boosters:
-        # In a more complex system, you might stack multipliers. Here we just find the highest.
-        # For this example, we'll just assume the 2x booster exists.
-        active_multiplier = 2 # This would come from the item's metadata
-    
-    final_reward *= active_multiplier
-    return final_reward
-
-# ... (router definition)
-
-@router.post("/complete", response_model=BalanceUpdateResponse)
-async def complete_task(
-    completion_data: TaskComplete,
-    current_user: User = Depends(get_current_user)
-):
-    # ... (code to get task_id and config, and check cooldown) ...
-
-    base_reward = 0
-    
-    # --- Task-specific Logic to determine BASE reward ---
-    if completion_data.task_id in ["watch_ad", "daily_tap"]:
-        base_reward = config["reward"]
-    elif completion_data.task_id == "quiz_game":
-        # ... (logic to check quiz answer)
-        if quiz.correctAnswerIndex == payload["answerIndex"]:
-            base_reward = config["reward"]
-        else:
-            # ... (handle incorrect answer)
-    # ...
-
-    # --- Apply Boosters and Grant Final Reward ---
-    if base_reward > 0:
-        final_reward = await apply_inventory_boosters(current_user, base_reward)
+        if existing_quiz:
+            skipped_count += 1
+            continue  # Skip to the next item if a duplicate is found
         
-        await current_user.update(
-            Inc({User.hc_balance: final_reward, User.hc_earned_in_level: final_reward}),
-            Set({f"task_cooldowns.{completion_data.task_id}": datetime.utcnow()})
+        # If no duplicate, create and insert the new quiz
+        new_quiz = Quiz(
+            **quiz_data.model_dump(),
+            isActive=True  # Ensure all seeded quizzes are active
         )
+        await new_quiz.create()
+        added_count += 1
 
-        return BalanceUpdateResponse(
-            message=f"Task '{completion_data.task_id}' completed! You earned {final_reward} HC.",
-            new_balance=current_user.hc_balance + final_reward
-        )
-    
-    # Fallback if no reward was earned
-    raise HTTPException(status_code=400, detail="Task could not be completed for a reward.")
-
-"""
+    return {
+        "message": "Quiz seeding process completed.",
+        "quizzes_added": added_count,
+        "duplicates_skipped": skipped_count
+    }
