@@ -1,5 +1,5 @@
 # components/tasks.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -9,12 +9,18 @@ from beanie.operators import Inc, Set
 from core.security import get_current_user
 from .users import User
 
+from core.game_logic import GameLogic
+
 router = APIRouter(prefix="/api/tasks", tags=["Tasks & Quizzes"])
 
 # --- Task Configuration ---
 # This dictionary defines all available tasks, their rewards, and cooldowns in seconds.
 # 'type' can be 'INSTANT' (like watching an ad) or 'QUIZ'.
 TASK_CONFIG = {
+    # Daily login thing
+    "daily_check_in": {"reward": 50, "cooldown_seconds": 79200, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
+
+    # Daily tasks thing
     "watch_ad": {"reward": 100, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 75, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
@@ -54,6 +60,18 @@ class TaskComplete(BaseModel):
 class BalanceUpdateResponse(BaseModel):
     message: str
     new_balance: int
+    cooldown_expires_at: datetime | None = None
+
+
+class TaskStatus(BaseModel):
+    task_id: str
+    description: str
+    reward: int
+    type: str
+    cooldown_seconds: int
+    is_available: bool
+    cooldown_expires_at: datetime | None = None
+    seconds_until_available: int | None = None
 
 
 class QuizQuestionResponse(BaseModel):
@@ -93,19 +111,42 @@ async def complete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     # --- Cooldown Check ---
-    last_completed = current_user.task_cooldowns.get(task_id)
-    if last_completed and datetime.utcnow() < last_completed + timedelta(seconds=config["cooldown_seconds"]):
+    cooldown_expiry = current_user.task_cooldowns.get(task_id)
+    if cooldown_expiry and datetime.utcnow() < cooldown_expiry:
         raise HTTPException(status_code=429, detail="Task is on cooldown. Try again later.")
 
-    reward_amount = 0
+    base_reward_amount = 0
+    updates_to_set = {}
 
     # --- Task-specific Logic ---
-    if task_id == "watch_ad":
-        reward_amount = config["reward"]
+    if task_id == "daily_check_in":
+        base_reward_amount = config["reward"]
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        
+        new_streak = 1
+        # Check if the last check-in was yesterday to continue the streak
+        if current_user.last_check_in_date and current_user.last_check_in_date == yesterday:
+            new_streak = current_user.daily_streak + 1
+        # If the last check-in was today, it's a redundant call, but we don't reset.
+        elif current_user.last_check_in_date and current_user.last_check_in_date == today:
+            new_streak = current_user.daily_streak
+        # Otherwise, the streak resets to 1.
+        
+        # Calculate streak bonus (e.g., 10 HC per day, capped at 7 days)
+        streak_bonus = min(new_streak, 7) * 10
+        base_reward_amount += streak_bonus # Add bonus to base reward
+        
+        # Prepare the streak fields for updating
+        updates_to_set[User.last_check_in_date] = today
+        updates_to_set[User.daily_streak] = new_streak
+
+    elif task_id == "watch_ad":
+        base_reward_amount = config["reward"]
         # In a real app, you might have server-to-server ad validation logic here
         
     elif task_id == "daily_tap":
-        reward_amount = config["reward"]
+        base_reward_amount = config["reward"]
 
     elif task_id == "quiz_game":
         # This task type requires a payload with the quiz answer
@@ -118,28 +159,48 @@ async def complete_task(
             raise HTTPException(status_code=404, detail="Quiz not found")
 
         if quiz.correctAnswerIndex == payload["answerIndex"]:
-            reward_amount = config["reward"]
+            base_reward_amount = config["reward"]
         else:
-            # If wrong, update cooldown but give no reward and return a specific message
-            await current_user.update(Set({f"task_cooldowns.{task_id}": datetime.utcnow()}))
-            raise HTTPException(status_code=400, detail="Incorrect answer. No reward given.")
+            # If wrong, update cooldown expiry but give no reward and return a specific message
+            cooldown_expiry = datetime.utcnow() + timedelta(seconds=config["cooldown_seconds"])
+            await current_user.update(Set({f"task_cooldowns.{task_id}": cooldown_expiry}))
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "message": "Incorrect answer. No reward given.",
+                    "cooldown_expires_at": cooldown_expiry.isoformat()
+                }
+            )
 
     elif task_id == "quick_tap":
         # This task simply gives a small reward without cooldown
-        reward_amount = config["reward"]
+        base_reward_amount = config["reward"]
     else:
         raise HTTPException(status_code=400, detail="Unknown task completion logic.")
 
     # --- Grant Reward and Update Cooldown ---
-    if reward_amount > 0:
+    cooldown_expiry = None
+
+    final_reward: int = 0
+    
+    if base_reward_amount > 0:
+        final_reward = await GameLogic.calculate_task_reward(
+            user=current_user,
+            base_reward=base_reward_amount
+        )
+
+        cooldown_expiry = datetime.utcnow() + timedelta(seconds=config["cooldown_seconds"])
+        updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
+        
         await current_user.update(
-            Inc({User.hc_balance: reward_amount, User.hc_earned_in_level: reward_amount}),
-            Set({f"task_cooldowns.{task_id}": datetime.utcnow()})
+            Inc({User.hc_balance: final_reward, User.hc_earned_in_level: final_reward}),
+            Set(updates_to_set)
         )
 
     return BalanceUpdateResponse(
         message=f"Task '{task_id}' completed successfully!",
-        new_balance=current_user.hc_balance
+        new_balance=current_user.hc_balance + final_reward,
+        cooldown_expires_at=cooldown_expiry
     )
 
 
@@ -185,67 +246,3 @@ async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# --- DTOs for Quiz Seeding ---
-class QuizSeedItem(BaseModel):
-    """Represents a single quiz question to be seeded."""
-    question_pt: str
-    question_en: str
-    options_pt: List[str]
-    options_en: List[str]
-    correctAnswerIndex: int
-
-class QuizSeedPayload(BaseModel):
-    """The payload for the seed-quiz endpoint, containing a list of quizzes."""
-    quizzes: List[QuizSeedItem]
-
-
-@router.post("/dev/seed-quiz", include_in_schema=False)
-async def seed_quiz_data(payload: QuizSeedPayload):
-    """
-    Endpoint to add multiple quizzes to the DB from a dictionary payload.
-    It checks for duplicate questions (based on 'question_en') and skips them.
-    Not for production use.
-    """
-    added_count = 0
-    skipped_count = 0
-
-    for quiz_data in payload.quizzes:
-        # Check if a quiz with the same English question already exists
-        existing_quiz = await Quiz.find_one({"question_en": quiz_data.question_en})
-
-        if existing_quiz:
-            skipped_count += 1
-            continue  # Skip to the next item if a duplicate is found
-        
-        # If no duplicate, create and insert the new quiz
-        new_quiz = Quiz(
-            **quiz_data.model_dump(),
-            isActive=True  # Ensure all seeded quizzes are active
-        )
-        await new_quiz.create()
-        added_count += 1
-
-    return {
-        "message": "Quiz seeding process completed.",
-        "quizzes_added": added_count,
-        "duplicates_skipped": skipped_count
-    }

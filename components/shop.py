@@ -136,48 +136,68 @@ async def purchase_item(
     purchase_data: PurchaseRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Purchases an item by validating against the static shop config."""
-    # Look up the item in our config dictionary instead of the database.
     item_data = SHOP_ITEMS_CONFIG.get(purchase_data.item_id)
     
     if not item_data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found or unavailable.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found.")
     
-    # Use the ShopItemOut model to easily access item properties
     item_to_buy = ShopItemOut(**item_data)
-        
     total_cost = item_to_buy.price * purchase_data.quantity
     
     if current_user.hc_balance < total_cost:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin.")
 
-    # --- Handle special instant-effect items that aren't added to inventory ---
-    if item_to_buy.item_type == "SPECIAL" and item_to_buy.item_id == "safe_lock_recharger":
-        # TODO: Implement the logic to apply this instant effect (e.g., update a global state).
+    # --- Handle special instant-effect items ---
+    if item_to_buy.item_type == "SPECIAL":
+        # Note: A real implementation would require a global state model.
+        # For now, we just deduct the cost and return a message.
         await current_user.update(Inc({User.hc_balance: -total_cost}))
         return {
             "message": f"Successfully activated {item_to_buy.name}!",
             "new_balance": current_user.hc_balance - total_cost
         }
     
-    # --- TODO: Handle BUNDLE item type ---
+    # ### NEW ### --- Handle BUNDLE item type ---
     if item_to_buy.item_type == "BUNDLE":
-        # Logic for bundles: fetch items from metadata and add them individually.
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Bundle purchases are not yet implemented.")
+        if purchase_data.quantity > 1:
+            # To keep logic simple, we'll restrict bundle purchases to one at a time.
+            raise HTTPException(status_code=400, detail="Can only purchase one bundle at a time.")
+        
+        bundle_items = item_to_buy.metadata.get("contains", [])
+        inventory_additions = []
+        for sub_item_id in bundle_items:
+            sub_item_data = SHOP_ITEMS_CONFIG.get(sub_item_id)
+            if not sub_item_data: continue # Skip if an item in bundle is misconfigured
 
-    # --- Create the inventory item entry for all other items ---
+            new_inventory_item = InventoryItem(item_id=sub_item_id, quantity=1)
+            
+            if "duration_seconds" in sub_item_data["metadata"]:
+                duration = timedelta(seconds=sub_item_data["metadata"]["duration_seconds"])
+                new_inventory_item.expires_at = datetime.utcnow() + duration
+            
+            inventory_additions.append(new_inventory_item.model_dump())
+        
+        # Atomically deduct cost and push all bundle items to inventory
+        await current_user.update(
+            Inc({User.hc_balance: -total_cost}),
+            Push({User.inventory: {"$each": inventory_additions}})
+        )
+        return {
+            "message": f"Successfully purchased bundle: {item_to_buy.name}!",
+            "new_balance": current_user.hc_balance - total_cost
+        }
+
+    # --- Standard Item Purchase ---
     new_inventory_item = InventoryItem(
         item_id=item_to_buy.item_id,
         quantity=purchase_data.quantity,
         purchased_at=datetime.utcnow()
     )
     
-    # Handle timed items by checking for duration in metadata
     if "duration_seconds" in item_to_buy.metadata:
         duration = timedelta(seconds=item_to_buy.metadata["duration_seconds"])
-        new_inventory_item.expires_at = datetime.utcnow() + duration
+        new_inventory_item.expires_at = datetime.utcnow() + (duration * purchase_data.quantity)
         
-    # --- Perform atomic update to deduct cost and add item to user's DB document ---
     await current_user.update(
         Inc({User.hc_balance: -total_cost}),
         Push({User.inventory: new_inventory_item.model_dump()})

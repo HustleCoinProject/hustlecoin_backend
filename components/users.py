@@ -1,5 +1,5 @@
 # components/users.py
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, EmailStr, Field
 from beanie import Document, PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -34,6 +34,11 @@ class User(Document):
     hc_earned_in_level: int = 0
     language: str = "en"
     task_cooldowns: Dict[str, datetime] = Field(default_factory=dict) # e.g., {"daily_tap": datetime.utcnow()}
+    
+    # For streak system
+    last_check_in_date: date | None = None # Store only the date, not datetime
+    daily_streak: int = 0
+    
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
@@ -51,12 +56,20 @@ class UserOut(BaseModel):
     hc_earned_in_level: int
     language: str
     task_cooldowns: Dict[str, datetime]
+    daily_streak: int
     createdAt: datetime
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
     username: str
+    current_hustle: str = "Street Vendor"  # Default starting hustle
+    language: str = "en"  # Default language
+
+class UserProfileUpdate(BaseModel):
+    username: str | None = None
+    current_hustle: str | None = None
+    language: str | None = None
 
 class Token(BaseModel):
     access_token: str
@@ -64,17 +77,40 @@ class Token(BaseModel):
 
 
 
-# --- Endpoints ---
+
+# A model to represent owned land tiles.
+# We'll define the full LandTile document in land.py
+class OwnedLand(BaseModel):
+    h3_index: str
+    purchased_at: datetime
+
+
+
+from components.hustles import HUSTLE_CONFIG
+
+
 @router.post("/register", response_model=UserOut, status_code=201)
 async def register_user(user_data: UserRegister):
     if await User.find_one(User.email == user_data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
+    if await User.find_one(User.username == user_data.username):
+        raise HTTPException(status_code=400, detail="Username is already taken")
+
+    # Validate that the chosen hustle is a valid level 1 hustle
+    level_1_hustles = HUSTLE_CONFIG.get(1, [])
+    if user_data.current_hustle not in level_1_hustles:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid starting hustle. Choose one of: {', '.join(level_1_hustles)}"
+        )
 
     hashed_password = get_password_hash(user_data.password)
     user = User(
         username=user_data.username,
         email=user_data.email,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        current_hustle=user_data.current_hustle,
+        language=user_data.language
     )
     await user.create()
     return user
@@ -94,6 +130,38 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.get("/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+
+# Edit profile endpoint
+@router.put("/profile", response_model=UserOut)
+async def update_profile(profile_data: UserProfileUpdate, current_user: User = Depends(get_current_user)):
+    """
+    Update user profile information (username, current_hustle, language).
+    Only updates fields that are provided (not None).
+    """
+    update_fields = {}
+    
+    if profile_data.username is not None:
+        # Check if username is already taken by another user
+        existing_user = await User.find_one(User.username == profile_data.username)
+        if existing_user and existing_user.id != current_user.id:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        update_fields["username"] = profile_data.username
+    
+    if profile_data.current_hustle is not None:
+        update_fields["current_hustle"] = profile_data.current_hustle
+    
+    if profile_data.language is not None:
+        update_fields["language"] = profile_data.language
+    
+    if update_fields:
+        await current_user.update({"$set": update_fields})
+        # Refetch the user to get updated data
+        updated_user = await User.get(current_user.id)
+        return updated_user
+    
     return current_user
 
 

@@ -11,7 +11,7 @@ class LeaderboardEntry(BaseModel):
     hc_balance: int
     level: int
 
-@router.get("/", response_model=List[LeaderboardEntry])
+@router.get("", response_model=List[LeaderboardEntry])
 async def get_leaderboard():
     top_users = await User.find(
         {},

@@ -7,3 +7,9 @@ python-multipart
 uvicorn[standard]
 gunicorn
 
+
+# For land tiling system
+h3
+
+# For testing simulation (temporary)
+faker
