@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from beanie import Document, PydanticObjectId, Indexed
-from beanie.operators import Inc
+from beanie.operators import Inc,In
 
 from core.security import get_current_user
 from .users import User
@@ -66,16 +66,16 @@ async def get_tiles_in_bbox(
             [min_lng, min_lat] 
         ]]
     }
-    
+
     # Get all H3 indexes within the polygon at the defined resolution
-    h3_indexes = list(h3.polyfill_geojson(geojson_polygon, MAP_RESOLUTION))
+    h3_indexes = list(h3.geo_to_cells(geojson_polygon, MAP_RESOLUTION))
 
     if not h3_indexes:
         return []
 
     # Find which of these tiles are already owned
     owned_tiles = await LandTile.find(
-        LandTile.h3_index.in_(h3_indexes)
+        In(LandTile.h3_index, h3_indexes)
     ).to_list()
     owned_map = {tile.h3_index: tile.owner_id for tile in owned_tiles}
 
