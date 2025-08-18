@@ -97,12 +97,16 @@ def translate_text(text: str, language: str = "en") -> str:
     """
     Translate a given text to the specified language.
     If translation is not found, returns the original text.
+    Language code is case-insensitive (e.g., 'pt', 'PT', 'Pt' all work).
     """
-    return TRANSLATIONS.get(language, {}).get(text, text)
+    # Normalize language code to lowercase
+    normalized_language = language.lower()
+    return TRANSLATIONS.get(normalized_language, {}).get(text, text)
 
 def translate_list(items: list, language: str = "en") -> list:
     """
     Translate a list of items to the specified language.
+    Language code is case-insensitive.
     """
     return [translate_text(item, language) for item in items]
 
@@ -110,6 +114,7 @@ def translate_dict_values(data: Dict[str, Any], language: str = "en") -> Dict[st
     """
     Translate string values in a dictionary while keeping the structure intact.
     Only translates string values, leaves other types unchanged.
+    Language code is case-insensitive.
     """
     translated = {}
     for key, value in data.items():
