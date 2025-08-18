@@ -49,8 +49,8 @@ async def get_tiles_in_bbox(
                       example="-46.65,-23.58,-46.60,-23.52")
 ):
     """
-    Get all H3 tiles and their ownership status within a given bounding box.
-    Used by the client to render the map view.
+    Get all OWNED H3 tiles within a given bounding box.
+    This is used by the client to render the map view with only relevant tiles.
     """
     try:
         min_lng, min_lat, max_lng, max_lat = map(float, bbox.split(','))
@@ -67,24 +67,26 @@ async def get_tiles_in_bbox(
         ]]
     }
 
-    # Get all H3 indexes within the polygon at the defined resolution
+    # Get all potential H3 indexes within the polygon at the defined resolution
     h3_indexes = list(h3.geo_to_cells(geojson_polygon, MAP_RESOLUTION))
 
     if not h3_indexes:
         return []
 
-    # Find which of these tiles are already owned
+    # Find which of these potential tiles are actually owned
     owned_tiles = await LandTile.find(
         In(LandTile.h3_index, h3_indexes)
     ).to_list()
-    owned_map = {tile.h3_index: tile.owner_id for tile in owned_tiles}
 
-    # Prepare the response
-    response_tiles = [
-        TileInfo(h3_index=index, owner_id=owned_map.get(index))
-        for index in h3_indexes
+    # --- FIX ---
+    # The original code returned all h3_indexes, with null for unowned tiles.
+    # The new code only returns the tiles that were found in the database (i.e., are owned).
+    # This creates a much smaller and more useful response.
+    return [
+        TileInfo(h3_index=tile.h3_index, owner_id=tile.owner_id)
+        for tile in owned_tiles
     ]
-    return response_tiles
+
 
 @router.get("/my-lands", response_model=List[MyLandTile])
 async def get_my_lands(current_user: User = Depends(get_current_user)):
