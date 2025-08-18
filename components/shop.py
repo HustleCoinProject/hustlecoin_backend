@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from beanie.operators import Inc, Push
 
 from core.security import get_current_user
+from core.translations import translate_text, translate_dict_values
 from components.users import User, InventoryItem
 
 
@@ -123,10 +124,22 @@ class PurchaseRequest(BaseModel):
 
 
 @router.get("/items", response_model=List[ShopItemOut])
-async def list_shop_items():
-    """Lists all active items available for purchase from the static config."""
-    # We simply return all the items defined in our configuration dictionary.
-    return list(SHOP_ITEMS_CONFIG.values())
+async def list_shop_items(current_user: User = Depends(get_current_user)):
+    """Lists all active items available for purchase from the static config, translated to user's language."""
+    user_language = current_user.language
+    translated_items = []
+    
+    for item in SHOP_ITEMS_CONFIG.values():
+        # Create a copy of the item to avoid modifying the original
+        translated_item = item.copy()
+        
+        # Translate name and description
+        translated_item["name"] = translate_text(item["name"], user_language)
+        translated_item["description"] = translate_text(item["description"], user_language)
+        
+        translated_items.append(translated_item)
+    
+    return translated_items
 
 
 
@@ -142,6 +155,7 @@ async def purchase_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found.")
     
     item_to_buy = ShopItemOut(**item_data)
+    translated_item_name = translate_text(item_data["name"], current_user.language)
     total_cost = item_to_buy.price * purchase_data.quantity
     
     if current_user.hc_balance < total_cost:
@@ -153,7 +167,7 @@ async def purchase_item(
         # For now, we just deduct the cost and return a message.
         await current_user.update(Inc({User.hc_balance: -total_cost}))
         return {
-            "message": f"Successfully activated {item_to_buy.name}!",
+            "message": f"Successfully activated {translated_item_name}!",
             "new_balance": current_user.hc_balance - total_cost
         }
     
@@ -183,7 +197,7 @@ async def purchase_item(
             Push({User.inventory: {"$each": inventory_additions}})
         )
         return {
-            "message": f"Successfully purchased bundle: {item_to_buy.name}!",
+            "message": f"Successfully purchased bundle: {translated_item_name}!",
             "new_balance": current_user.hc_balance - total_cost
         }
 
@@ -204,6 +218,6 @@ async def purchase_item(
     )
     
     return {
-        "message": f"Successfully purchased {purchase_data.quantity} x {item_to_buy.name}!",
+        "message": f"Successfully purchased {purchase_data.quantity} x {translated_item_name}!",
         "new_balance": current_user.hc_balance - total_cost
     }

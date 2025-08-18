@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from beanie.operators import Set, Inc
 
 from core.security import get_current_user
+from core.translations import translate_list, translate_text
 from .users import User
 
 router = APIRouter(prefix="/api/hustles", tags=["Hustles & Levels"])
@@ -52,31 +53,57 @@ class UpgradeResponse(BaseModel):
 
 
 @router.get("/all", response_model=Dict[int, List[str]])
-async def get_all_hustles():
-    """Lists all hustles in the game, grouped by level."""
-    return HUSTLE_CONFIG
+async def get_all_hustles(current_user: User = Depends(get_current_user)):
+    """Lists all hustles in the game, grouped by level, translated to user's language."""
+    user_language = current_user.language
+    translated_config = {}
+    
+    for level, hustles in HUSTLE_CONFIG.items():
+        translated_config[level] = translate_list(hustles, user_language)
+    
+    return translated_config
 
 
 
 @router.get("/available", response_model=List[str])
 async def get_available_hustles_for_user(current_user: User = Depends(get_current_user)):
-    """Gets the list of hustles for the user's current level."""
-    return HUSTLE_CONFIG.get(current_user.level, [])
+    """Gets the list of hustles for the user's current level, translated to user's language."""
+    hustles = HUSTLE_CONFIG.get(current_user.level, [])
+    return translate_list(hustles, current_user.language)
 
 
 
 @router.post("/select")
 async def select_hustle(hustle_data: HustleSelect, current_user: User = Depends(get_current_user)):
-    """Allows a user to change their hustle within their current level."""
+    """Allows a user to change their hustle within their current level. Accepts both English and translated names."""
     available_hustles = HUSTLE_CONFIG.get(current_user.level, [])
-    if hustle_data.hustle_name not in available_hustles:
+    
+    # Check if the provided hustle name is valid (either in English or translated)
+    selected_hustle_english = None
+    
+    # First check if it's already in English
+    if hustle_data.hustle_name in available_hustles:
+        selected_hustle_english = hustle_data.hustle_name
+    else:
+        # Check if it's a translated name that maps to an English hustle
+        for english_hustle in available_hustles:
+            if translate_text(english_hustle, current_user.language) == hustle_data.hustle_name:
+                selected_hustle_english = english_hustle
+                break
+    
+    if not selected_hustle_english:
+        available_translated = translate_list(available_hustles, current_user.language)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Hustle '{hustle_data.hustle_name}' is not available at level {current_user.level}."
+            detail=f"Hustle '{hustle_data.hustle_name}' is not available at level {current_user.level}. Available: {available_translated}"
         )
 
-    await current_user.update(Set({User.current_hustle: hustle_data.hustle_name}))
-    return {"message": f"Hustle changed to {hustle_data.hustle_name}"}
+    # Store the English version in the database
+    await current_user.update(Set({User.current_hustle: selected_hustle_english}))
+    
+    # Return the translated name in the response
+    translated_name = translate_text(selected_hustle_english, current_user.language)
+    return {"message": f"Hustle changed to {translated_name}"}
 
 
 
@@ -87,11 +114,14 @@ async def get_level_status(current_user: User = Depends(get_current_user)):
     next_level = current_user.level + 1
     requirements = LEVEL_REQUIREMENTS.get(next_level)
 
+    # Translate current hustle name
+    translated_current_hustle = translate_text(current_user.current_hustle, current_user.language)
+
     if not requirements:
         # User is at the max level
         return LevelStatusResponse(
             current_level=current_user.level,
-            current_hustle=current_user.current_hustle,
+            current_hustle=translated_current_hustle,
             days_in_level_progress=0, days_in_level_required=0,
             hc_earned_in_level_progress=current_user.hc_earned_in_level,
             hc_earned_in_level_required=0,
@@ -107,7 +137,7 @@ async def get_level_status(current_user: User = Depends(get_current_user)):
 
     return LevelStatusResponse(
         current_level=current_user.level,
-        current_hustle=current_user.current_hustle,
+        current_hustle=translated_current_hustle,
         days_in_level_progress=round(days_in_level, 2),
         days_in_level_required=requirements["days_in_level"],
         hc_earned_in_level_progress=current_user.hc_earned_in_level,
@@ -133,14 +163,15 @@ async def upgrade_user_level(current_user: User = Depends(get_current_user)):
     next_level = current_user.level + 1
     upgrade_fee = status_response.upgrade_fee
     
-    # Reset for the new level
-    new_hustle = HUSTLE_CONFIG[next_level][0] # Default to the first hustle of the new level
+    # Reset for the new level (keep English name in database)
+    new_hustle_english = HUSTLE_CONFIG[next_level][0] # Default to the first hustle of the new level
+    new_hustle_translated = translate_text(new_hustle_english, current_user.language)
     
     await current_user.update(
         Inc({User.hc_balance: -upgrade_fee}),
         Set({
             User.level: next_level,
-            User.current_hustle: new_hustle,
+            User.current_hustle: new_hustle_english,  # Store English name
             User.level_entry_date: datetime.utcnow(),
             User.hc_earned_in_level: 0 # Reset the earnings counter
         })
@@ -149,5 +180,5 @@ async def upgrade_user_level(current_user: User = Depends(get_current_user)):
     return UpgradeResponse(
         message=f"Congratulations! You have been promoted to Level {next_level}.",
         new_level=next_level,
-        new_hustle=new_hustle
+        new_hustle=new_hustle_translated  # Return translated name
     )
