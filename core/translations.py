@@ -4,23 +4,6 @@ from typing import Dict, Any
 # Translation dictionaries for different languages
 TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
-        # Hustles
-        "Street Vendor": "Street Vendor",
-        "Cart Pusher": "Cart Pusher", 
-        "Taxi Driver": "Taxi Driver",
-        "Shopkeeper": "Shopkeeper",
-        "Motorcycle Owner": "Motorcycle Owner",
-        "Small Farmer": "Small Farmer",
-        "Secretary": "Secretary",
-        "Store Owner": "Store Owner",
-        "Manager": "Manager",
-        "Minister": "Minister",
-        "Lawyer": "Lawyer",
-        "Business Director": "Business Director",
-        "President": "President",
-        "CEO": "CEO",
-        "Hustle Legend": "Hustle Legend",
-        
         # Shop items
         "Speed Hustle": "Speed Hustle",
         "Completes all of your tasks 2x faster.": "Completes all of your tasks 2x faster.",
@@ -48,23 +31,6 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Grants lifetime full access and an elite title.": "Grants lifetime full access and an elite title.",
     },
     "pt": {
-        # Hustles in Portuguese
-        "Street Vendor": "Vendedor de Rua",
-        "Cart Pusher": "Empurrador de Carrinho",
-        "Taxi Driver": "Taxista",
-        "Shopkeeper": "Lojista",
-        "Motorcycle Owner": "Proprietário de Motocicleta",
-        "Small Farmer": "Pequeno Agricultor",
-        "Secretary": "Secretário",
-        "Store Owner": "Dono de Loja",
-        "Manager": "Gerente",
-        "Minister": "Ministro",
-        "Lawyer": "Advogado",
-        "Business Director": "Diretor de Negócios",
-        "President": "Presidente",
-        "CEO": "CEO",
-        "Hustle Legend": "Lenda do Hustle",
-        
         # Shop items in Portuguese
         "Speed Hustle": "Hustle Rápido",
         "Completes all of your tasks 2x faster.": "Completa todas as suas tarefas 2x mais rápido.",

@@ -8,7 +8,6 @@ from typing import Dict, List
 
 from core.security import (create_access_token, get_current_user,
                            get_password_hash, verify_password)
-from core.translations import translate_text
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -102,25 +101,10 @@ async def register_user(user_data: UserRegister):
 
     # Validate that the chosen hustle is a valid level 1 hustle
     level_1_hustles = HUSTLE_CONFIG.get(1, [])
-    
-    # Check if the provided hustle is valid (either English or translated)
-    selected_hustle_english = None
-    if user_data.current_hustle in level_1_hustles:
-        # It's already in English
-        selected_hustle_english = user_data.current_hustle
-    else:
-        # Check if it's a translated name
-        for english_hustle in level_1_hustles:
-            if translate_text(english_hustle, user_data.language) == user_data.current_hustle:
-                selected_hustle_english = english_hustle
-                break
-    
-    if not selected_hustle_english:
-        from core.translations import translate_list
-        available_translated = translate_list(level_1_hustles, user_data.language)
+    if user_data.current_hustle not in level_1_hustles:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid starting hustle. Choose one of: {', '.join(available_translated)}"
+            detail=f"Invalid starting hustle. Choose one of: {', '.join(level_1_hustles)}"
         )
 
     hashed_password = get_password_hash(user_data.password)
@@ -128,15 +112,11 @@ async def register_user(user_data: UserRegister):
         username=user_data.username,
         email=user_data.email,
         hashed_password=hashed_password,
-        current_hustle=selected_hustle_english,  # Store English name
+        current_hustle=user_data.current_hustle,
         language=user_data.language
     )
     await user.create()
-    
-    # Return with translated hustle name
-    user_dict = user.dict()
-    user_dict["current_hustle"] = translate_text(selected_hustle_english, user_data.language)
-    return UserOut(**user_dict)
+    return user
 
 
 
@@ -153,10 +133,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.get("/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    # Create a response with translated hustle name
-    user_dict = current_user.dict()
-    user_dict["current_hustle"] = translate_text(current_user.current_hustle, current_user.language)
-    return UserOut(**user_dict)
+    return current_user
 
 
 
@@ -213,15 +190,9 @@ async def update_profile(profile_data: UserProfileUpdate, current_user: User = D
         await current_user.update({"$set": update_fields})
         # Refetch the user to get updated data
         updated_user = await User.get(current_user.id)
-        # Return with translated hustle name
-        user_dict = updated_user.dict()
-        user_dict["current_hustle"] = translate_text(updated_user.current_hustle, updated_user.language)
-        return UserOut(**user_dict)
+        return updated_user
     
-    # Return current user with translated hustle name
-    user_dict = current_user.dict()
-    user_dict["current_hustle"] = translate_text(current_user.current_hustle, current_user.language)
-    return UserOut(**user_dict)
+    return current_user
 
 
 
