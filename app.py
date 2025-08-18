@@ -36,6 +36,15 @@ app.include_router(land.router)
 # Add the dev router here
 app.include_router(dev.router)
 
+
+# Endpoint to get current server's timestamp {"timestamp": <current time> }
+# it must be exactly same format so it appears like this in frontend: 2025-08-17 15:25:39.279
+@router.get("/api/timestamp", response_model=dict)
+async def get_server_time():
+    """Returns the current server time in a specific format."""
+    return {"timestamp": datetime.utcnow().isoformat()}
+
+
 @app.get("/", tags=["Root"])
 async def read_root():
     return {"message": "Welcome to the HustleCoin API v1!"}

@@ -204,9 +204,6 @@ async def complete_task(
     )
 
 
-
-
-
 # DOCS: Uses PyMongo here directly due to a bug that Motor/Beanie
 #      has version mis-match with PyMongo. Bug is in Beanie or Motor.
 @router.get("/quiz/fetch", response_model=QuizQuestionResponse)
