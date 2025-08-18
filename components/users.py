@@ -68,6 +68,9 @@ class UserRegister(BaseModel):
 
 class UserProfileUpdate(BaseModel):
     username: str | None = None
+    email: EmailStr | None = None
+    current_password: str | None = None
+    new_password: str | None = None
     current_hustle: str | None = None
     language: str | None = None
 
@@ -138,24 +141,51 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 @router.put("/profile", response_model=UserOut)
 async def update_profile(profile_data: UserProfileUpdate, current_user: User = Depends(get_current_user)):
     """
-    Update user profile information (username, current_hustle, language).
+    Update user profile information (username, email, password, current_hustle, language).
     Only updates fields that are provided (not None).
+    Password changes require the current password for verification.
     """
     update_fields = {}
     
-    if profile_data.username is not None:
+    # Handle password change
+    if profile_data.new_password is not None:
+        # Current password must be provided to change the password
+        if profile_data.current_password is None:
+            raise HTTPException(status_code=400, detail="Current password is required to set a new password")
+        
+        # Verify current password
+        if not verify_password(profile_data.current_password, current_user.hashed_password):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        
+        # Set new hashed password
+        update_fields["hashed_password"] = get_password_hash(profile_data.new_password)
+    
+    # Handle email change
+    if profile_data.email is not None and profile_data.email != current_user.email:
+        # Check if email is already used
+        existing_user = await User.find_one(User.email == profile_data.email)
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email is already registered")
+        
+        update_fields["email"] = profile_data.email
+    
+    # Handle username change
+    if profile_data.username is not None and profile_data.username != current_user.username:
         # Check if username is already taken by another user
         existing_user = await User.find_one(User.username == profile_data.username)
-        if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(status_code=400, detail="Username already taken")
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username is already taken")
+        
         update_fields["username"] = profile_data.username
     
+    # Handle other profile fields
     if profile_data.current_hustle is not None:
         update_fields["current_hustle"] = profile_data.current_hustle
     
     if profile_data.language is not None:
         update_fields["language"] = profile_data.language
     
+    # Update user if there are changes
     if update_fields:
         await current_user.update({"$set": update_fields})
         # Refetch the user to get updated data
