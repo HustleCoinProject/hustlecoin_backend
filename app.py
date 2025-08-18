@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from core.database import init_db
 from components import users, tasks, leaderboard, hustles, shop, land, dev
 
+from datetime import datetime, timedelta, date
+
 
 app = FastAPI(
     title="HustleCoin Backend",
