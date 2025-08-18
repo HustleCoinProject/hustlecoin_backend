@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/land", tags=["Land System"])
 # --- Game Configuration ---
 LAND_PRICE = 500  # Price in HustleCoin to buy one tile
 LAND_SELL_PRICE = 400 # Price for selling a tile back to the system
-MAP_RESOLUTION = 10 # H3 resolution for tiles. 10 is ~150m edge length.
+MAP_RESOLUTION = 8
 
 LAND_INCOME_PER_DAY = 50
 LAND_INCOME_PER_SECOND = LAND_INCOME_PER_DAY / (24 * 3600)
