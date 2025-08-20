@@ -29,6 +29,23 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Grants full access to all features and VIP bonuses.": "Grants full access to all features and VIP bonuses.",
         "Permanent Key": "Permanent Key",
         "Grants lifetime full access and an elite title.": "Grants lifetime full access and an elite title.",
+        
+        # Hustle names
+        "Street Vendor": "Street Vendor",
+        "Cart Pusher": "Cart Pusher",
+        "Taxi Driver": "Taxi Driver",
+        "Shopkeeper": "Shopkeeper",
+        "Motorcycle Owner": "Motorcycle Owner",
+        "Small Farmer": "Small Farmer",
+        "Secretary": "Secretary",
+        "Store Owner": "Store Owner",
+        "Manager": "Manager",
+        "Minister": "Minister",
+        "Lawyer": "Lawyer",
+        "Business Director": "Business Director",
+        "President": "President",
+        "CEO": "CEO",
+        "Hustle Legend": "Hustle Legend",
     },
     "pt": {
         # Shop items in Portuguese
@@ -56,6 +73,23 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "Grants full access to all features and VIP bonuses.": "Concede acesso total a todos os recursos e bônus VIP.",
         "Permanent Key": "Chave Permanente",
         "Grants lifetime full access and an elite title.": "Concede acesso total vitalício e um título de elite.",
+        
+        # Hustle names in Portuguese
+        "Street Vendor": "Vendedor de Rua",
+        "Cart Pusher": "Carroceiro",
+        "Taxi Driver": "Motorista de Táxi",
+        "Shopkeeper": "Lojista",
+        "Motorcycle Owner": "Proprietário de Moto",
+        "Small Farmer": "Pequeno Agricultor",
+        "Secretary": "Secretário",
+        "Store Owner": "Dono de Loja",
+        "Manager": "Gerente",
+        "Minister": "Ministro",
+        "Lawyer": "Advogado",
+        "Business Director": "Diretor de Negócios",
+        "President": "Presidente",
+        "CEO": "CEO",
+        "Hustle Legend": "Lenda do Hustle",
     }
 }
 

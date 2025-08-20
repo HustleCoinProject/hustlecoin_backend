@@ -8,6 +8,7 @@ from typing import Dict, List
 
 from core.security import (create_access_token, get_current_user,
                            get_password_hash, verify_password)
+from core.translations import translate_text
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -51,7 +52,7 @@ class UserOut(BaseModel):
     email: EmailStr
     hc_balance: int = 0
     level: int = 1
-    current_hustle: str
+    current_hustle: Dict[str, str]  # Changed to Dict[str, str] for localized key-value pair
     level_entry_date: datetime
     hc_earned_in_level: int
     language: str
@@ -92,6 +93,14 @@ class OwnedLand(BaseModel):
 from components.hustles import HUSTLE_CONFIG
 
 
+def _create_user_out_response(user: User) -> Dict:
+    """Helper function to create UserOut response with localized hustle name."""
+    user_dict = user.dict()
+    # Convert current_hustle from string to localized key-value pair
+    user_dict["current_hustle"] = {user.current_hustle: translate_text(user.current_hustle, user.language)}
+    return user_dict
+
+
 @router.post("/register", response_model=UserOut, status_code=201)
 async def register_user(user_data: UserRegister):
     if await User.find_one(User.email == user_data.email):
@@ -116,7 +125,7 @@ async def register_user(user_data: UserRegister):
         language=user_data.language
     )
     await user.create()
-    return user
+    return _create_user_out_response(user)
 
 
 
@@ -133,7 +142,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.get("/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return _create_user_out_response(current_user)
 
 
 
@@ -190,9 +199,9 @@ async def update_profile(profile_data: UserProfileUpdate, current_user: User = D
         await current_user.update({"$set": update_fields})
         # Refetch the user to get updated data
         updated_user = await User.get(current_user.id)
-        return updated_user
+        return _create_user_out_response(updated_user)
     
-    return current_user
+    return _create_user_out_response(current_user)
 
 
 

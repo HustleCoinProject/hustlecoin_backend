@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from beanie.operators import Set, Inc
 
 from core.security import get_current_user
+from core.translations import translate_text
 from .users import User
 
 router = APIRouter(prefix="/api/hustles", tags=["Hustles & Levels"])
@@ -35,7 +36,7 @@ class HustleSelect(BaseModel):
 
 class LevelStatusResponse(BaseModel):
     current_level: int
-    current_hustle: str
+    current_hustle: Dict[str, str]  # Changed from str to Dict[str, str] for key-value pair
     days_in_level_progress: float # e.g., 2.5
     days_in_level_required: int
     hc_earned_in_level_progress: int
@@ -46,22 +47,34 @@ class LevelStatusResponse(BaseModel):
 class UpgradeResponse(BaseModel):
     message: str
     new_level: int
-    new_hustle: str
+    new_hustle: Dict[str, str]  # Changed from str to Dict[str, str] for key-value pair
 
 # --- Endpoints ---
 
+def _localize_hustles(hustles: List[str], language: str = "en") -> Dict[str, str]:
+    """Helper function to convert hustle list to localized key-value pairs."""
+    return {hustle: translate_text(hustle, language) for hustle in hustles}
 
-@router.get("/all", response_model=Dict[int, List[str]])
-async def get_all_hustles():
-    """Lists all hustles in the game, grouped by level."""
-    return HUSTLE_CONFIG
+def _localize_hustle_config(language: str = "en") -> Dict[int, Dict[str, str]]:
+    """Helper function to convert entire hustle config to localized key-value pairs."""
+    return {
+        level: _localize_hustles(hustles, language) 
+        for level, hustles in HUSTLE_CONFIG.items()
+    }
+
+
+@router.get("/all", response_model=Dict[int, Dict[str, str]])
+async def get_all_hustles(current_user: User = Depends(get_current_user)):
+    """Lists all hustles in the game, grouped by level, with localized names."""
+    return _localize_hustle_config(current_user.language)
 
 
 
-@router.get("/available", response_model=List[str])
+@router.get("/available", response_model=Dict[str, str])
 async def get_available_hustles_for_user(current_user: User = Depends(get_current_user)):
-    """Gets the list of hustles for the user's current level."""
-    return HUSTLE_CONFIG.get(current_user.level, [])
+    """Gets the list of hustles for the user's current level with localized names."""
+    available_hustles = HUSTLE_CONFIG.get(current_user.level, [])
+    return _localize_hustles(available_hustles, current_user.language)
 
 
 
@@ -88,11 +101,14 @@ async def get_level_status(current_user: User = Depends(get_current_user)):
     next_level = current_user.level + 1
     requirements = LEVEL_REQUIREMENTS.get(next_level)
 
+    # Create localized hustle key-value pair
+    current_hustle_localized = {current_user.current_hustle: translate_text(current_user.current_hustle, current_user.language)}
+
     if not requirements:
         # User is at the max level
         return LevelStatusResponse(
             current_level=current_user.level,
-            current_hustle=current_user.current_hustle,
+            current_hustle=current_hustle_localized,
             days_in_level_progress=0, days_in_level_required=0,
             hc_earned_in_level_progress=current_user.hc_earned_in_level,
             hc_earned_in_level_required=0,
@@ -108,7 +124,7 @@ async def get_level_status(current_user: User = Depends(get_current_user)):
 
     return LevelStatusResponse(
         current_level=current_user.level,
-        current_hustle=current_user.current_hustle,
+        current_hustle=current_hustle_localized,
         days_in_level_progress=round(days_in_level, 2),
         days_in_level_required=requirements["days_in_level"],
         hc_earned_in_level_progress=current_user.hc_earned_in_level,
@@ -136,6 +152,7 @@ async def upgrade_user_level(current_user: User = Depends(get_current_user)):
     
     # Reset for the new level
     new_hustle = HUSTLE_CONFIG[next_level][0] # Default to the first hustle of the new level
+    new_hustle_localized = {new_hustle: translate_text(new_hustle, current_user.language)}
     
     await current_user.update(
         Inc({User.hc_balance: -upgrade_fee}),
@@ -150,5 +167,5 @@ async def upgrade_user_level(current_user: User = Depends(get_current_user)):
     return UpgradeResponse(
         message=f"Congratulations! You have been promoted to Level {next_level}.",
         new_level=next_level,
-        new_hustle=new_hustle
+        new_hustle=new_hustle_localized
     )
