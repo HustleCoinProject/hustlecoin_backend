@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Dict, List
 
-from core.security import (create_access_token, get_current_user,
-                           get_password_hash, verify_password)
+from core.security import (create_access_token, create_refresh_token, get_current_user,
+                           get_password_hash, verify_password, verify_refresh_token)
 from core.translations import translate_text
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
@@ -77,7 +77,11 @@ class UserProfileUpdate(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 
@@ -136,7 +140,31 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
 
     access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": user.username})
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_access_token(refresh_data: RefreshTokenRequest):
+    """
+    Refresh access token using a valid refresh token.
+    Returns a new access token and refresh token pair.
+    """
+    try:
+        # Verify the refresh token and get username
+        username = await verify_refresh_token(refresh_data.refresh_token)
+        
+        # Create new tokens
+        access_token = create_access_token(data={"sub": username})
+        refresh_token = create_refresh_token(data={"sub": username})
+        
+        return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    
+    except HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )
 
 
 
