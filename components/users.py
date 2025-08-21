@@ -1,6 +1,12 @@
 # components/users.py
 from datetime import date, datetime
 from pydantic import BaseModel, EmailStr, Field
+try:
+    # Pydantic v2
+    from pydantic import field_validator as validator
+except Exception:  # pragma: no cover
+    # Pydantic v1 fallback
+    from pydantic import validator
 from beanie import Document, PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -24,8 +30,8 @@ class InventoryItem(BaseModel):
 
 # --- Beanie Document Model ---
 class User(Document):
-    username: str = Field(..., unique=True)
-    email: EmailStr = Field(..., unique=True)
+    username: str = Field(..., unique=True, min_length=3, max_length=30)
+    email: EmailStr = Field(..., unique=True, max_length=254)
     hashed_password: str
     hc_balance: int = 0
     inventory: List[InventoryItem] = Field(default_factory=list)
@@ -61,19 +67,42 @@ class UserOut(BaseModel):
     createdAt: datetime
 
 class UserRegister(BaseModel):
-    email: EmailStr
-    password: str
-    username: str
+    email: EmailStr = Field(..., max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+    username: str = Field(..., min_length=3, max_length=30)
     current_hustle: str = "Street Vendor"  # Default starting hustle
     language: str = "en"  # Default language
 
+    @validator("email")
+    def validate_email_length(cls, v: EmailStr) -> EmailStr:
+        # Practical maximum per RFC guidelines is 254; local part <= 64
+        email_str = str(v)
+        if len(email_str) > 254:
+            raise ValueError("Email must be at most 254 characters long")
+        local_part = email_str.split("@")[0]
+        if len(local_part) > 64:
+            raise ValueError("Email local part must be at most 64 characters long")
+        return v
+
 class UserProfileUpdate(BaseModel):
-    username: str | None = None
-    email: EmailStr | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=30)
+    email: EmailStr | None = Field(default=None, max_length=254)
     current_password: str | None = None
-    new_password: str | None = None
+    new_password: str | None = Field(default=None, min_length=8, max_length=128)
     current_hustle: str | None = None
     language: str | None = None
+
+    @validator("email")
+    def validate_email_length_optional(cls, v: EmailStr | None) -> EmailStr | None:
+        if v is None:
+            return v
+        email_str = str(v)
+        if len(email_str) > 254:
+            raise ValueError("Email must be at most 254 characters long")
+        local_part = email_str.split("@")[0]
+        if len(local_part) > 64:
+            raise ValueError("Email local part must be at most 64 characters long")
+        return v
 
 class Token(BaseModel):
     access_token: str

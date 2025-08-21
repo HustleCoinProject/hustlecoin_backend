@@ -63,10 +63,12 @@ def _localize_hustle_config(language: str = "en") -> Dict[int, Dict[str, str]]:
     }
 
 
+# This endpoint doesn't require login - because it is used
+# during account register, when user's language is not known yet.
 @router.get("/all", response_model=Dict[int, Dict[str, str]])
-async def get_all_hustles(current_user: User = Depends(get_current_user)):
+async def get_all_hustles():
     """Lists all hustles in the game, grouped by level, with localized names."""
-    return _localize_hustle_config(current_user.language)
+    return _localize_hustle_config(language="en")
 
 
 
