@@ -7,7 +7,6 @@ from beanie import PydanticObjectId
 
 # --- Imports for Logic ---
 from components.users import User
-from components.land import LAND_INCOME_PER_SECOND
 from components.shop import SHOP_ITEMS_CONFIG # Important: Import the config
 from core.config import settings
 
@@ -75,7 +74,7 @@ class GameLogic:
             The final, calculated passive income as an integer.
         """
         now = datetime.utcnow()
-        base_income = time_diff_seconds * LAND_INCOME_PER_SECOND
+        base_income = time_diff_seconds * settings.LAND_INCOME_PER_SECOND
         land_multiplier = 1.0
 
         # Apply active boosters from inventory

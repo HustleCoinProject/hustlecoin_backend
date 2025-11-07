@@ -50,6 +50,9 @@ class User(Document):
     daily_tap_earnings: int = 0  # HC earned from taps today
     last_tap_reset_date: date | None = None  # Last date when tap earnings were reset
     
+    # For land income claiming system
+    last_land_claim_at: datetime | None = None  # Last time user claimed land income
+    
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
@@ -70,6 +73,7 @@ class UserOut(BaseModel):
     daily_streak: int
     daily_tap_earnings: int = 0
     last_tap_reset_date: date | None = None
+    last_land_claim_at: datetime | None = None
     createdAt: datetime
 
 class UserRegister(BaseModel):

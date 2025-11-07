@@ -7,6 +7,17 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 48  # 48 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 60  # 60 days
+    
+    # Land configuration
+    LAND_PRICE: int = 500  # Price in HustleCoin to buy one tile
+    LAND_SELL_PRICE: int = 400  # Price for selling a tile back to the system
+    LAND_INCOME_PER_DAY: int = 50
+    LAND_INCOME_ACCUMULATE: bool = False  # If True, income accumulates over days; if False, fixed daily amount
+    
+    @property
+    def LAND_INCOME_PER_SECOND(self) -> float:
+        """Calculate land income per second from daily income"""
+        return self.LAND_INCOME_PER_DAY / (24 * 3600)
 
     class Config:
         env_file = ".env"
