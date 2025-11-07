@@ -1,15 +1,39 @@
-fastapi[all]
-beanie
-motor
-passlib[bcrypt]
-python-jose[cryptography]
-python-multipart
-uvicorn[standard]
-gunicorn
+# FastAPI-specific
+fastapi==0.119.0
+uvicorn==0.38.0
+uvloop==0.22.1
+httptools==0.7.1
+watchfiles==1.1.1
+python-dotenv==1.1.1
+jinja2==3.1.6
+httpx==0.28.1
+itsdangerous==2.2.0
+
+
+# MongoDB
+beanie==2.0.0
+motor==3.7.1
+
+
+# Multipart Forms
+python-multipart==0.0.20
+
+
+# Encryption
+passlib==1.7.4
+bcrypt==5.0.0
+python-jose==3.5.0
+cryptography==46.0.3
+ecdsa==0.19.1
+
+
+# Deployment
+gunicorn==23.0.0
 
 
 # For land tiling system
-h3
+h3==4.3.1
+
 
 # For testing simulation (temporary)
-faker
+faker==37.11.0
