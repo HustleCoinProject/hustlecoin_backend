@@ -3,7 +3,7 @@ import asyncio
 from core.scheduler import periodic_land_income_task
 from fastapi import FastAPI
 from core.database import init_db
-from components import users, tasks, leaderboard, hustles, shop, land, dev
+from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping
 
 from datetime import datetime, timedelta, date
 
@@ -34,6 +34,7 @@ app.include_router(leaderboard.router)
 app.include_router(hustles.router)
 app.include_router(shop.router)
 app.include_router(land.router)
+app.include_router(tapping.router)
 
 # Add the dev router here
 app.include_router(dev.router)

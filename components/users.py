@@ -46,6 +46,10 @@ class User(Document):
     last_check_in_date: date | None = None # Store only the date, not datetime
     daily_streak: int = 0
     
+    # For daily tap system
+    daily_tap_earnings: int = 0  # HC earned from taps today
+    last_tap_reset_date: date | None = None  # Last date when tap earnings were reset
+    
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
@@ -64,6 +68,8 @@ class UserOut(BaseModel):
     language: str
     task_cooldowns: Dict[str, datetime]
     daily_streak: int
+    daily_tap_earnings: int = 0
+    last_tap_reset_date: date | None = None
     createdAt: datetime
 
 class UserRegister(BaseModel):

@@ -24,9 +24,6 @@ TASK_CONFIG = {
     "watch_ad": {"reward": 100, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 75, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
-
-    # A quick tap to increment coin by 1, no cooldown
-    "quick_tap": {"reward": 1, "cooldown_seconds": 0, "type": "INSTANT", "description": "Quick tap for 1 HC"},
 }
 
 # --- Beanie Document Model for Quizzes ---
@@ -172,9 +169,6 @@ async def complete_task(
                 }
             )
 
-    elif task_id == "quick_tap":
-        # This task simply gives a small reward without cooldown
-        base_reward_amount = config["reward"]
     else:
         raise HTTPException(status_code=400, detail="Unknown task completion logic.")
 
@@ -189,8 +183,10 @@ async def complete_task(
             base_reward=base_reward_amount
         )
 
-        cooldown_expiry = datetime.utcnow() + timedelta(seconds=config["cooldown_seconds"])
-        updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
+        # Set cooldown only if cooldown_seconds > 0
+        if config["cooldown_seconds"] > 0:
+            cooldown_expiry = datetime.utcnow() + timedelta(seconds=config["cooldown_seconds"])
+            updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
         
         await current_user.update(
             Inc({User.hc_balance: final_reward, User.hc_earned_in_level: final_reward}),
