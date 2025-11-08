@@ -1,9 +1,5 @@
 # core/game_logic.py
 from datetime import datetime
-from pymongo import UpdateOne
-from motor.motor_asyncio import AsyncIOMotorClient
-from collections import defaultdict
-from beanie import PydanticObjectId
 
 # --- Imports for Logic ---
 from components.users import User
@@ -92,89 +88,3 @@ class GameLogic:
 
         final_income = base_income * land_multiplier
         return round(final_income)
-
-
-
-
-
-# --- The background task remains, but it will be refactored to use the GameLogic class ---
-
-async def distribute_land_income_logic_stateful():
-    """
-    Calculates and distributes passive land income.
-    Refactored to use the central GameLogic class.
-    """
-    print("Starting STATEFUL land income distribution process...")
-    
-    client = AsyncIOMotorClient(settings.MONGO_DETAILS)
-    db = client.get_database("hustlecoin_db")
-    land_collection = db.land_tiles
-    user_collection = db.users
-
-    # --- Fetch all users who own land to get their inventory and level ---
-    land_owner_ids = await land_collection.distinct("owner_id")
-    if not land_owner_ids:
-        print("No land owners found. Process finished.")
-        client.close()
-        return {"message": "No land owners to process.", "updated_users": 0}
-
-    # Create a map of {user_id: user_object} for efficient lookup
-    users_cursor = User.find(User.id.in_(land_owner_ids))
-    owner_map = {user.id: user async for user in users_cursor}
-
-    payout_time = datetime.utcnow()
-    income_per_user = defaultdict(float)
-    processed_tile_ids = []
-
-    cursor = land_collection.find({})
-    async for tile_doc in cursor:
-        tile_id = tile_doc["_id"]
-        owner_id = tile_doc["owner_id"]
-        last_payout = tile_doc["last_income_payout_at"]
-
-        owner = owner_map.get(owner_id)
-        if not owner:
-            continue # Skip tiles with no active owner
-
-        time_diff_seconds = (payout_time - last_payout).total_seconds()
-        if time_diff_seconds <= 0:
-            continue
-            
-        # --- HERE is the change: Call the GameLogic class ---
-        earned_income = await GameLogic.calculate_land_income(
-            user=owner,
-            time_diff_seconds=time_diff_seconds
-        )
-
-        income_per_user[owner_id] += earned_income
-        processed_tile_ids.append(tile_id)
-
-    if not income_per_user:
-        print("No income to distribute. Process finished.")
-        client.close()
-        return {"message": "No income to distribute.", "updated_users": 0}
-        
-    # --- Database Updates (this part remains the same) ---
-    user_updates = [
-        UpdateOne(
-            {"_id": PydanticObjectId(user_id)},
-            {"$inc": {"hc_balance": round(total_income)}}
-        )
-        for user_id, total_income in income_per_user.items()
-    ]
-    
-    tile_update_result = await land_collection.update_many(
-        {"_id": {"$in": processed_tile_ids}},
-        {"$set": {"last_income_payout_at": payout_time}}
-    )
-
-    user_update_result = await user_collection.bulk_write(user_updates)
-
-    client.close()
-    
-    print(f"Income distributed. {user_update_result.modified_count} users updated. {tile_update_result.modified_count} tiles updated.")
-    return {
-        "message": "Stateful income distribution complete.",
-        "updated_users": user_update_result.modified_count,
-        "processed_tiles": tile_update_result.modified_count
-    }
