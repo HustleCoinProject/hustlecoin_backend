@@ -36,12 +36,12 @@ SHOP_ITEMS_CONFIG = {
         "item_type": "BOOSTER",
         "metadata": {"effect": "hc_multiplier", "value": 2, "duration_seconds": 3600} # 1 hour
     },
-    "power_prestige": {
-        "item_id": "power_prestige", "name": "Power Prestige", "price": 200,
-        "description": "Increases Rank Point gains by 50% to help you climb the leaderboards.",
-        "item_type": "BOOSTER",
-        "metadata": {"effect": "rank_point_multiplier", "value": 1.5, "duration_seconds": 86400} # 1 day
-    },
+    # "power_prestige": {
+    #     "item_id": "power_prestige", "name": "Power Prestige", "price": 200,
+    #     "description": "Increases Rank Point gains by 50% to help you climb the leaderboards.",
+    #     "item_type": "BOOSTER",
+    #     "metadata": {"effect": "rank_point_multiplier", "value": 1.5, "duration_seconds": 86400} # 1 day
+    # },
     "hustler_brain": {
         "item_id": "hustler_brain", "name": "Hustler Brain", "price": 90,
         "description": "Reduces the cooldown on your tasks by 50%.",
@@ -55,50 +55,50 @@ SHOP_ITEMS_CONFIG = {
         "metadata": {"effect": "land_income_multiplier", "value": 2, "duration_seconds": 259200} # 3 days
     },
     # --- Special Items ---
-    "safe_lock_recharger": {
-        "item_id": "safe_lock_recharger", "name": "Safe Lock Recharger", "price": 80,
-        "description": "Instantly adds 5% to the community Safe Luck Fund.",
-        "item_type": "SPECIAL",
-        "metadata": {"effect": "add_to_safe_luck_fund", "value_percentage": 5} # Instant
-    },
+    # "safe_lock_recharger": {
+    #     "item_id": "safe_lock_recharger", "name": "Safe Lock Recharger", "price": 80,
+    #     "description": "Instantly adds 5% to the community Safe Luck Fund.",
+    #     "item_type": "SPECIAL",
+    #     "metadata": {"effect": "add_to_safe_luck_fund", "value_percentage": 5} # Instant
+    # },
     # --- Bundles ---
-    "combo_boost_pack": {
-        "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 300,
-        "description": "A high-value bundle containing Speed Hustle, Double Coins, and Power Prestige.",
-        "item_type": "BUNDLE",
-        "metadata": {"contains": ["speed_hustle", "double_coins", "power_prestige"]}
-    },
+    # "combo_boost_pack": {
+    #     "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 300,
+    #     "description": "A high-value bundle containing Speed Hustle, Double Coins, and Power Prestige.",
+    #     "item_type": "BUNDLE",
+    #     "metadata": {"contains": ["speed_hustle", "double_coins", "power_prestige"]}
+    # },
     # --- Access Keys ---
     "bronze_key": {
         "item_id": "bronze_key", "name": "Bronze Key", "price": 100,
         "description": "Unlocks access to basic spells, land, and boosters.",
         "item_type": "ACCESS_KEY",
-        "metadata": {"access_level": "bronze", "duration_seconds": 259200} # 3 days
+        "metadata": {"effect": "access_level", "access_level": "bronze", "duration_seconds": 259200} # 3 days
     },
-    "silver_key": {
-        "item_id": "silver_key", "name": "Silver Key", "price": 250,
-        "description": "Unlocks rare spells, all lands, and special events.",
-        "item_type": "ACCESS_KEY",
-        "metadata": {"access_level": "silver", "duration_seconds": 604800} # 7 days
-    },
-    "gold_key": {
-        "item_id": "gold_key", "name": "Gold Key", "price": 500,
-        "description": "Unlocks VIP tasks and ranking boards.",
-        "item_type": "ACCESS_KEY",
-        "metadata": {"access_level": "gold", "duration_seconds": 1296000} # 15 days
-    },
-    "platinum_key": {
-        "item_id": "platinum_key", "name": "Platinum Key", "price": 900,
-        "description": "Grants full access to all features and VIP bonuses.",
-        "item_type": "ACCESS_KEY",
-        "metadata": {"access_level": "platinum", "duration_seconds": 2592000} # 30 days
-    },
-    "permanent_key": {
-        "item_id": "permanent_key", "name": "Permanent Key", "price": 10000,
-        "description": "Grants lifetime full access and an elite title.",
-        "item_type": "ACCESS_KEY",
-        "metadata": {"access_level": "permanent", "title": "Elite"} # Forever
-    }
+    # "silver_key": {
+    #     "item_id": "silver_key", "name": "Silver Key", "price": 250,
+    #     "description": "Unlocks rare spells, all lands, and special events.",
+    #     "item_type": "ACCESS_KEY",
+    #     "metadata": {"access_level": "silver", "duration_seconds": 604800} # 7 days
+    # },
+    # "gold_key": {
+    #     "item_id": "gold_key", "name": "Gold Key", "price": 500,
+    #     "description": "Unlocks VIP tasks and ranking boards.",
+    #     "item_type": "ACCESS_KEY",
+    #     "metadata": {"access_level": "gold", "duration_seconds": 1296000} # 15 days
+    # },
+    # "platinum_key": {
+    #     "item_id": "platinum_key", "name": "Platinum Key", "price": 900,
+    #     "description": "Grants full access to all features and VIP bonuses.",
+    #     "item_type": "ACCESS_KEY",
+    #     "metadata": {"access_level": "platinum", "duration_seconds": 2592000} # 30 days
+    # },
+    # "permanent_key": {
+    #     "item_id": "permanent_key", "name": "Permanent Key", "price": 10000,
+    #     "description": "Grants lifetime full access and an elite title.",
+    #     "item_type": "ACCESS_KEY",
+    #     "metadata": {"access_level": "permanent", "title": "Elite"} # Forever
+    # }
 }
 
 

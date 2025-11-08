@@ -159,7 +159,11 @@ async def complete_task(
             base_reward_amount = config["reward"]
         else:
             # If wrong, update cooldown expiry but give no reward and return a specific message
-            cooldown_expiry = datetime.utcnow() + timedelta(seconds=config["cooldown_seconds"])
+            actual_cooldown_seconds = await GameLogic.calculate_task_cooldown(
+                user=current_user,
+                base_cooldown_seconds=config["cooldown_seconds"]
+            )
+            cooldown_expiry = datetime.utcnow() + timedelta(seconds=actual_cooldown_seconds)
             await current_user.update(Set({f"task_cooldowns.{task_id}": cooldown_expiry}))
             raise HTTPException(
                 status_code=400, 
@@ -185,7 +189,12 @@ async def complete_task(
 
         # Set cooldown only if cooldown_seconds > 0
         if config["cooldown_seconds"] > 0:
-            cooldown_expiry = datetime.utcnow() + timedelta(seconds=config["cooldown_seconds"])
+            # Calculate actual cooldown with boosters applied
+            actual_cooldown_seconds = await GameLogic.calculate_task_cooldown(
+                user=current_user,
+                base_cooldown_seconds=config["cooldown_seconds"]
+            )
+            cooldown_expiry = datetime.utcnow() + timedelta(seconds=actual_cooldown_seconds)
             updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
         
         await current_user.update(

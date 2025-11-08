@@ -14,6 +14,10 @@ from typing import Dict, List
 
 from core.security import (create_access_token, create_refresh_token, get_current_user,
                            get_password_hash, verify_password, verify_refresh_token)
+from core.game_logic import GameLogic
+from components.shop import SHOP_ITEMS_CONFIG
+from core.translations import translate_text
+from core.game_logic import GameLogic
 from core.translations import translate_text
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
@@ -26,6 +30,22 @@ class InventoryItem(BaseModel):
     quantity: int = 1
     purchased_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: datetime | None = None # For timed boosters
+
+
+class InventoryItemOut(BaseModel):
+    """Compact inventory item response for frontend display."""
+    item_id: str
+    quantity: int
+    purchased_at: datetime
+    expires_at: datetime | None = None
+    
+    # Item details for display
+    name: str
+    description: str
+    item_type: str
+    
+    # Time remaining for active items
+    time_remaining_seconds: float | None = None
 
 
 # --- Beanie Document Model ---
@@ -272,16 +292,51 @@ async def update_profile(profile_data: UserProfileUpdate, current_user: User = D
 
 
 
-@router.get("/inventory", response_model=List[InventoryItem])
+@router.get("/inventory", response_model=List[InventoryItemOut])
 async def get_user_inventory(current_user: User = Depends(get_current_user)):
     """
-    Views the current user's inventory of purchased items.
-    This endpoint also filters out any expired items before returning them.
+    Views the current user's active inventory items for frontend display.
+    Only returns non-expired items with essential display information.
     """
     now = datetime.utcnow()
-    # Filter inventory to only include items that have not expired.
-    active_inventory = [
-        item for item in current_user.inventory
-        if not item.expires_at or item.expires_at > now
-    ]
+    user_language = current_user.language
+    active_inventory = []
+    
+    for item in current_user.inventory:
+        # Skip expired items completely
+        if item.expires_at and item.expires_at <= now:
+            continue
+            
+        # Get item configuration from shop
+        item_config = SHOP_ITEMS_CONFIG.get(item.item_id)
+        if not item_config:
+            # Skip items that are no longer in the shop config
+            continue
+        
+        # Calculate time remaining for active items
+        time_remaining_seconds = None
+        if item.expires_at:
+            time_remaining_seconds = (item.expires_at - now).total_seconds()
+        
+        # Create compact inventory item for frontend
+        inventory_item = InventoryItemOut(
+            item_id=item.item_id,
+            quantity=item.quantity,
+            purchased_at=item.purchased_at,
+            expires_at=item.expires_at,
+            
+            # Translated item details for display
+            name=translate_text(item_config["name"], user_language),
+            description=translate_text(item_config["description"], user_language),
+            item_type=item_config["item_type"],
+            
+            # Time remaining for countdown displays
+            time_remaining_seconds=time_remaining_seconds
+        )
+        
+        active_inventory.append(inventory_item)
+    
+    # Sort by purchase date (newest first)
+    active_inventory.sort(key=lambda x: -x.purchased_at.timestamp())
+    
     return active_inventory
