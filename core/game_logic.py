@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Callable
 
 # --- Imports for Logic ---
-from components.users import User
+from data.models import User
 from components.shop import SHOP_ITEMS_CONFIG # Important: Import the config
 from core.config import settings
 

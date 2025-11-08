@@ -10,7 +10,7 @@ from .config import settings
 
 # --- FIX: Use TYPE_CHECKING to prevent circular import at runtime ---
 if TYPE_CHECKING:
-    from components.users import User
+    from data.models import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
@@ -45,7 +45,7 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
 # This is another way to avoid direct imports at the top level.
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> "User":
     # --- FIX: Import User model here, inside the function scope ---
-    from components.users import User
+    from data.models import User
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -68,7 +68,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> "User":
 
 async def verify_refresh_token(token: str) -> str:
     """Verify refresh token and return username if valid."""
-    from components.users import User
+    from data.models import User
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

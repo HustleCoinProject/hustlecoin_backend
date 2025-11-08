@@ -11,9 +11,8 @@ from pydantic import BaseModel
 from typing import List
 
 # Import all Beanie models to be managed
-from .users import User, get_password_hash
-from .tasks import Quiz
-from .land import LandTile
+from data.models import User, Quiz, LandTile
+from core.security import get_password_hash
 from .hustles import HUSTLE_CONFIG
 
 router = APIRouter(prefix="/api/dev", tags=["Developer"])

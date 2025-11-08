@@ -3,30 +3,18 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from beanie import Document, PydanticObjectId, Indexed
+from beanie import PydanticObjectId
 from beanie.operators import Inc, In, Set
 
+from data.models import User, LandTile
 from core.security import get_current_user
 from core.game_logic import GameLogic
 from core.config import settings
-from .users import User
 
 router = APIRouter(prefix="/api/land", tags=["Land System"])
 
 # --- Game Configuration ---
 MAP_RESOLUTION = 8
-
-# --- Beanie Document Model ---
-class LandTile(Document):
-    h3_index: Indexed(str, unique=True)
-    owner_id: Indexed(PydanticObjectId)
-    purchased_at: datetime = Field(default_factory=datetime.utcnow)
-    purchase_price: int = Field(default_factory=lambda: settings.LAND_PRICE)
-    last_income_payout_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-    class Settings:
-        name = "land_tiles"
 
 # --- DTOs ---
 class TileInfo(BaseModel):

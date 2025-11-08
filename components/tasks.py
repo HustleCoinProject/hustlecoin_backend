@@ -3,12 +3,11 @@ from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from beanie import Document, PydanticObjectId
+from beanie import PydanticObjectId
 from beanie.operators import Inc, Set
 
+from data.models import User, Quiz
 from core.security import get_current_user
-from .users import User
-
 from core.game_logic import GameLogic
 
 router = APIRouter(prefix="/api/tasks", tags=["Tasks & Quizzes"])
@@ -25,18 +24,6 @@ TASK_CONFIG = {
     "daily_tap": {"reward": 50, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 75, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
 }
-
-# --- Beanie Document Model for Quizzes ---
-class Quiz(Document):
-    question_pt: str
-    question_en: str
-    options_pt: List[str]
-    options_en: List[str]
-    correctAnswerIndex: int
-    isActive: bool = True
-
-    class Settings:
-        name = "quizzes" # This collection will still exist
 
 
 # --- DTOs (Data Transfer Objects) ---

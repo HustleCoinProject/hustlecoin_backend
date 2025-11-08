@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from beanie.operators import Inc, Push
 
+from data.models import User, InventoryItem
 from core.security import get_current_user
 from core.translations import translate_text, translate_dict_values
-from components.users import User, InventoryItem
 
 
 

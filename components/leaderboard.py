@@ -2,7 +2,7 @@
 from typing import List
 from fastapi import APIRouter
 from pydantic import BaseModel
-from .users import User
+from data.models import User
 
 router = APIRouter(prefix="/api/leaderboard", tags=["Leaderboard"])
 

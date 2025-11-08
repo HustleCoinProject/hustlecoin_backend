@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from beanie.operators import Set, Inc
 
+from data.models import User
 from core.security import get_current_user
 from core.translations import translate_text
-from .users import User
 
 router = APIRouter(prefix="/api/hustles", tags=["Hustles & Levels"])
 

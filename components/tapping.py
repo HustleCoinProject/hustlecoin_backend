@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from beanie.operators import Inc, Set
 
+from data.models import User
 from core.security import get_current_user
-from .users import User
 from core.game_logic import GameLogic
 
 router = APIRouter(prefix="/api/tapping", tags=["Tapping System"])
