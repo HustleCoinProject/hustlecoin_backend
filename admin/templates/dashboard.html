@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - HustleCoin Admin{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-database fa-2x mb-3"></i>
+                <h3 class="mb-1">{{ total_collections }}</h3>
+                <p class="mb-0">Collections</p>
+            </div>
+        </div>
+    </div>
+    
+    {% for collection in collections_info %}
+    <div class="col-md-3 mb-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-table fa-2x text-primary mb-3"></i>
+                <h3 class="mb-1">{{ collection.count }}</h3>
+                <p class="mb-0">{{ collection.verbose_name }}</p>
+                {% if collection.error %}
+                <small class="text-danger">Error loading</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for collection in collections_info %}
+                    <div class="col-md-4 mb-3">
+                        <div class="d-grid gap-2">
+                            <a href="/admin/collection/{{ collection.name }}" 
+                               class="btn btn-outline-primary">
+                                <i class="fas fa-eye me-2"></i>
+                                View {{ collection.verbose_name }}
+                            </a>
+                            <a href="/admin/collection/{{ collection.name }}/create" 
+                               class="btn btn-outline-success">
+                                <i class="fas fa-plus me-2"></i>
+                                Add {{ collection.verbose_name }}
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Collections Overview -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    Collections Overview
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Collection</th>
+                                <th>Count</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for collection in collections_info %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-database me-2 text-primary"></i>
+                                    <strong>{{ collection.verbose_name }}</strong>
+                                    <br>
+                                    <small class="text-muted">{{ collection.name }}</small>
+                                </td>
+                                <td>
+                                    {% if collection.error %}
+                                    <span class="text-danger">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        Error
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-primary">{{ collection.count }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/admin/collection/{{ collection.name }}" 
+                                           class="btn btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="/admin/collection/{{ collection.name }}/create" 
+                                           class="btn btn-outline-success">
+                                            <i class="fas fa-plus"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

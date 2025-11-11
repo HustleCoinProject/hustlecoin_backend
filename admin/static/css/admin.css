@@ -1,0 +1,80 @@
+/* admin/static/css/admin.css */
+
+/* Additional admin panel styles */
+.admin-logo {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.sidebar-nav .nav-link {
+    transition: all 0.3s ease;
+    border-radius: 8px;
+    margin: 2px 0;
+}
+
+.sidebar-nav .nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(5px);
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(102, 126, 234, 0.05);
+}
+
+.btn-group-sm .btn {
+    margin: 0 1px;
+}
+
+.form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.alert {
+    border: none;
+    border-radius: 8px;
+}
+
+.pagination .page-link {
+    border-radius: 6px;
+    margin: 0 2px;
+    border: 1px solid #dee2e6;
+}
+
+.pagination .page-item.active .page-link {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+}
+
+/* Loading spinner */
+.spinner-border {
+    color: #667eea;
+}
+
+/* JSON editor styles */
+.json-editor {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+    }
+    
+    .table-responsive {
+        border-radius: 8px;
+    }
+    
+    .card {
+        margin-bottom: 1rem;
+    }
+}

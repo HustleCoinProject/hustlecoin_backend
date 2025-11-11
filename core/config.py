@@ -23,3 +23,7 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+
+# Export commonly used values for admin module
+JWT_SECRET_KEY = settings.SECRET_KEY
+JWT_ALGORITHM = settings.ALGORITHM

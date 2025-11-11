@@ -1,7 +1,10 @@
 # app.py
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from core.database import init_db
 from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping
+from admin import admin_router
+from admin.registry import auto_register_models
 
 from datetime import datetime, timedelta, date
 
@@ -12,12 +15,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Mount static files for admin panel
+app.mount("/admin/static", StaticFiles(directory="admin/static"), name="admin_static")
+
 @app.on_event("startup")
 async def on_startup():
     """Connect to the database when the app starts."""
     print("Initializing database connection...")
     await init_db()
     print("Database connection successful.")
+    
+    # Register admin models
+    print("Registering admin models...")
+    auto_register_models()
+    print("Admin models registered.")
 
 # --- Include Component Routers ---
 app.include_router(users.router)
@@ -30,6 +41,9 @@ app.include_router(tapping.router)
 
 # Add the dev router here
 app.include_router(dev.router)
+
+# Include admin router
+app.include_router(admin_router)
 
 
 # Endpoint to get current server's timestamp {"timestamp": <current time> }

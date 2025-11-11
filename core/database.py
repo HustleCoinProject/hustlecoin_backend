@@ -8,6 +8,7 @@ async def init_db():
     
     # --- FIX: Import models inside the function to avoid circular imports at startup ---
     from data.models import User, Quiz, LandTile
+    from admin.models import AdminUser
 
 
     client = motor.motor_asyncio.AsyncIOMotorClient(settings.MONGO_DETAILS)
@@ -17,6 +18,7 @@ async def init_db():
             User,
             Quiz,
             LandTile,
+            AdminUser,
             # Add other Beanie models here as you create them
         ]
     )

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit{% else %}Add{% endif %} {{ verbose_name }} - HustleCoin Admin
+{% endblock %}
+
+{% block page_title %}
+{% if is_edit %}Edit{% else %}Add{% endif %} {{ verbose_name }}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-{% if is_edit %}edit{% else %}plus{% endif %} me-2"></i>
+                    {% if is_edit %}Edit{% else %}Add New{% endif %} {{ verbose_name }}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                <form method="post" {% if is_edit %}action="/admin/collection/{{ model_name }}/edit/{{ document_id }}"{% else %}action="/admin/collection/{{ model_name }}/create"{% endif %}>
+                    {% for field_name, field_info in field_info.items() %}
+                    {% if not field_info.is_hidden and not field_info.is_readonly %}
+                    <div class="mb-3">
+                        <label for="{{ field_name }}" class="form-label">
+                            {{ field_info.verbose_name }}
+                            {% if field_info.is_required %}
+                            <span class="text-danger">*</span>
+                            {% endif %}
+                        </label>
+
+                        {% set current_value = document.get(field_name, '') %}
+
+                        {% if field_info.widget == 'checkbox' %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="{{ field_name }}" name="{{ field_name }}" 
+                                   value="true" {% if current_value %}checked{% endif %}>
+                            <label class="form-check-label" for="{{ field_name }}">
+                                {{ field_info.verbose_name }}
+                            </label>
+                        </div>
+
+                        {% elif field_info.widget in ['json_array', 'json_object', 'json'] %}
+                        <textarea class="form-control json-editor" id="{{ field_name }}" name="{{ field_name }}" 
+                                  rows="6" {% if field_info.is_required %}required{% endif %}
+                                  data-type="json" placeholder="{% if field_info.widget == 'json_array' %}[{"key": "value"}]{% elif field_info.widget == 'json_object' %}{"key": "value"}{% else %}JSON data{% endif %}">{% if current_value %}{{ current_value | tojson }}{% elif field_info.widget == 'json_object' %}{}{% elif field_info.widget == 'json_array' %}[]{% endif %}</textarea>
+
+                        {% elif field_info.widget == 'textarea' %}
+                        <textarea class="form-control" id="{{ field_name }}" name="{{ field_name }}" 
+                                  rows="4" {% if field_info.is_required %}required{% endif %}>{{ current_value }}</textarea>
+
+                        {% elif field_info.widget == 'datetime' %}
+                        <input type="datetime-local" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{% if current_value %}{{ current_value.strftime('%Y-%m-%dT%H:%M') if current_value.strftime else current_value }}{% endif %}"
+                               {% if field_info.is_required %}required{% endif %}>
+
+                        {% elif field_info.widget == 'number' %}
+                        <input type="number" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{{ current_value if current_value is not none else '' }}"
+                               {% if field_info.is_required %}required{% endif %}>
+
+                        {% elif field_info.widget == 'email' %}
+                        <input type="email" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{{ current_value }}"
+                               {% if field_info.is_required %}required{% endif %}>
+
+                        {% elif field_info.widget == 'password' %}
+                        <input type="password" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{{ current_value if not is_edit else '' }}"
+                               {% if field_info.is_required %}required{% endif %}
+                               {% if is_edit %}placeholder="Leave blank to keep current password"{% endif %}>
+
+                        {% elif field_info.widget == 'url' %}
+                        <input type="url" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{{ current_value }}"
+                               {% if field_info.is_required %}required{% endif %}>
+
+                        {% else %}
+                        <input type="text" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{{ current_value }}"
+                               {% if field_info.is_required %}required{% endif %}>
+                        {% endif %}
+
+                        {% if field_info.help_text %}
+                        <div class="form-text">{{ field_info.help_text }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>
+                            {% if is_edit %}Update{% else %}Create{% endif %}
+                        </button>
+                        <a href="/admin/collection/{{ model_name }}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Add JSON validation for JSON fields
+document.addEventListener('DOMContentLoaded', function() {
+    const jsonFields = document.querySelectorAll('textarea[name*="json"], textarea[data-type="json"]');
+    
+    jsonFields.forEach(field => {
+        field.addEventListener('blur', function() {
+            try {
+                if (this.value.trim()) {
+                    JSON.parse(this.value);
+                    this.classList.remove('is-invalid');
+                    this.classList.add('is-valid');
+                }
+            } catch (e) {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

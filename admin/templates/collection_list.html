@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}{{ verbose_name }} - HustleCoin Admin{% endblock %}
+{% block page_title %}{{ verbose_name }}{% endblock %}
+
+{% block content %}
+<!-- Header with actions -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">{{ verbose_name }}</h2>
+        <p class="text-muted">Total: {{ total }} records</p>
+    </div>
+    <div>
+        <a href="/admin/collection/{{ model_name }}/create" class="btn btn-success">
+            <i class="fas fa-plus me-2"></i>
+            Add {{ verbose_name }}
+        </a>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-body">
+        {% if documents %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        {% for field_name, field_info in field_info.items() %}
+                        {% if not field_info.is_hidden and field_name in ['id', 'username', 'email', 'hc_balance', 'level', 'current_hustle', 'question_en', 'correctAnswerIndex', 'isActive', 'h3_index', 'owner_id', 'purchase_price', 'purchased_at', 'is_superuser', 'is_active', 'created_at'] %}
+                        <th>{{ field_info.verbose_name }}</th>
+                        {% endif %}
+                        {% endfor %}
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for document in documents %}
+                    <tr>
+                        {% for field_name, field_info in field_info.items() %}
+                        {% if not field_info.is_hidden and field_name in ['id', 'username', 'email', 'hc_balance', 'level', 'current_hustle', 'question_en', 'correctAnswerIndex', 'isActive', 'h3_index', 'owner_id', 'purchase_price', 'purchased_at', 'is_superuser', 'is_active', 'created_at'] %}
+                        <td>
+                            {% set value = document.get(field_name, '') %}
+                            {% if field_info.field_type.__name__ == 'bool' %}
+                                {% if value %}
+                                <span class="badge bg-success">Yes</span>
+                                {% else %}
+                                <span class="badge bg-secondary">No</span>
+                                {% endif %}
+                            {% elif field_info.field_type.__name__ == 'datetime' %}
+                                {% if value %}
+                                {{ value.strftime('%Y-%m-%d %H:%M') if value.strftime else value }}
+                                {% endif %}
+                            {% elif field_info.field_type.__name__ == 'int' and field_name == 'hc_balance' %}
+                                <span class="badge bg-warning text-dark">{{ value }}</span>
+                            {% else %}
+                                {{ value }}
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        {% endfor %}
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="/admin/collection/{{ model_name }}/edit/{{ document.id }}" 
+                                   class="btn btn-outline-primary" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger" 
+                                        onclick="confirmDelete('{{ document.id }}')" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ previous_page }}">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                <li class="page-item active">
+                    <span class="page-link">{{ p }}</span>
+                </li>
+                {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                </li>
+                {% elif p == 4 or p == total_pages - 3 %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+                {% endfor %}
+
+                {% if has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ next_page }}">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center p-5">
+            <i class="fas fa-database fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No {{ verbose_name }} found</h5>
+            <p class="text-muted">Get started by creating your first {{ verbose_name.lower() }}.</p>
+            <a href="/admin/collection/{{ model_name }}/create" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>
+                Add {{ verbose_name }}
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this {{ verbose_name.lower() }}? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-2"></i>
+                        Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmDelete(documentId) {
+    const deleteForm = document.getElementById('deleteForm');
+    deleteForm.action = `/admin/collection/{{ model_name }}/delete/${documentId}`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+</script>
+{% endblock %}
