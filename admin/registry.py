@@ -443,7 +443,7 @@ class AdminRegistry:
 # Auto-register models from data.models
 def auto_register_models():
     """Automatically register models from the data.models module."""
-    from data.models.models import User, Quiz, LandTile
+    from data.models.models import User, Quiz, LandTile, Payout
     from admin.models import AdminUser
     
     # Register User model
@@ -495,6 +495,22 @@ def auto_register_models():
             verbose_name_plural="Admin Users",
             list_display=["username", "email", "is_superuser", "is_active", "created_at"],
             readonly_fields=["id", "created_at", "last_login", "hashed_password"],
+            exclude_fields=["revision_id", "_id", "__v"]
+        )
+    )
+    
+    # Register Payout model
+    AdminRegistry.register(
+        Payout,
+        AdminModelConfig(
+            Payout,
+            verbose_name="Payout",
+            verbose_name_plural="Payouts",
+            list_display=["user_id", "amount_kwanza", "payout_method", "status", "created_at"],
+            list_filter=["status", "payout_method"],
+            search_fields=["phone_number", "full_name", "bank_name"],
+            ordering=["-created_at"],
+            readonly_fields=["id", "created_at", "user_id", "amount_hc", "amount_kwanza", "conversion_rate"],
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )

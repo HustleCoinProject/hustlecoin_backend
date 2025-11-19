@@ -52,7 +52,7 @@
                         {% elif field_info.widget in ['json_array', 'json_object', 'json'] %}
                         <textarea class="form-control json-editor" id="{{ field_name }}" name="{{ field_name }}" 
                                   rows="6" {% if field_info.is_required %}required{% endif %}
-                                  data-type="json" placeholder="{% if field_info.widget == 'json_array' %}[{"key": "value"}]{% elif field_info.widget == 'json_object' %}{"key": "value"}{% else %}JSON data{% endif %}">{% if current_value %}{{ current_value | tojson }}{% elif field_info.widget == 'json_object' %}{}{% elif field_info.widget == 'json_array' %}[]{% endif %}</textarea>
+                                  data-type="json" placeholder="{% if field_info.widget == 'json_array' %}[{"key": "value"}]{% elif field_info.widget == 'json_object' %}{"key": "value"}{% else %}JSON data{% endif %}">{% if current_value and current_value != '' %}{% if current_value is string %}{{ current_value }}{% else %}{{ current_value | safe_json }}{% endif %}{% elif field_info.widget == 'json_object' %}{}{% elif field_info.widget == 'json_array' %}[]{% endif %}</textarea>
 
                         {% elif field_info.widget == 'textarea' %}
                         <textarea class="form-control" id="{{ field_name }}" name="{{ field_name }}" 
@@ -61,7 +61,7 @@
                         {% elif field_info.widget == 'datetime' %}
                         <input type="datetime-local" class="form-control" 
                                id="{{ field_name }}" name="{{ field_name }}" 
-                               value="{% if current_value %}{{ current_value.strftime('%Y-%m-%dT%H:%M') if current_value.strftime else current_value }}{% endif %}"
+                               value="{% if current_value %}{% if current_value.strftime is defined %}{{ current_value.strftime('%Y-%m-%dT%H:%M') }}{% else %}{{ current_value }}{% endif %}{% endif %}"
                                {% if field_info.is_required %}required{% endif %}>
 
                         {% elif field_info.widget == 'number' %}

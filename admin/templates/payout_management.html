@@ -1,0 +1,269 @@
+<!-- admin/templates/payout_management.html -->
+{% extends "base.html" %}
+
+{% block title %}Payout Management - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Payout Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="statistic">
+                                <div class="value">{{ stats.pending_count }}</div>
+                                <div class="label">Pending</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="statistic">
+                                <div class="value">{{ stats.completed_count }}</div>
+                                <div class="label">Completed</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="statistic">
+                                <div class="value">{{ stats.rejected_count }}</div>
+                                <div class="label">Rejected</div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="mt-3">
+                        <strong>Pending Total:</strong><br>
+                        {{ stats.pending_total_kwanza }} AOA<br>
+                        <small class="text-muted">{{ stats.pending_total_hc }} HC</small>
+                    </div>
+                    <div class="mt-2">
+                        <strong>Completed Total:</strong><br>
+                        {{ stats.total_completed_kwanza }} AOA<br>
+                        <small class="text-muted">{{ stats.total_completed_hc }} HC</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>Pending Payouts ({{ pending_payouts|length }})</h5>
+                    <div>
+                        <a href="/admin/collection/payout" class="btn btn-secondary btn-sm">View All Payouts</a>
+                        <button class="btn btn-primary btn-sm" onclick="location.reload()">Refresh</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if pending_payouts %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>Details</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payout in pending_payouts %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">{{ payout.user_id }}</small>
+                                    </td>
+                                    <td>
+                                        <strong>{{ payout.amount_kwanza }} AOA</strong><br>
+                                        <small class="text-muted">{{ payout.amount_hc }} HC</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">
+                                            {% if payout.payout_method == "multicaixa_express" %}
+                                                Multicaixa
+                                            {% else %}
+                                                Bank Transfer
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if payout.payout_method == "multicaixa_express" %}
+                                            <strong>Phone:</strong> {{ payout.phone_number }}<br>
+                                            <strong>Name:</strong> {{ payout.full_name }}<br>
+                                            <strong>ID:</strong> {{ payout.national_id }}
+                                        {% else %}
+                                            <strong>IBAN:</strong> {{ payout.bank_iban }}<br>
+                                            <strong>Bank:</strong> {{ payout.bank_name }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ payout.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-success btn-sm" 
+                                                    onclick="processPayoutModal('{{ payout.id }}', 'approve')">
+                                                Approve
+                                            </button>
+                                            <button type="button" class="btn btn-danger btn-sm" 
+                                                    onclick="processPayoutModal('{{ payout.id }}', 'reject')">
+                                                Reject
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <p class="text-muted">No pending payouts at the moment.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Process Payout Modal -->
+<div class="modal fade" id="processPayoutModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="processPayoutForm" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="processPayoutModalTitle">Process Payout</h5>
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="action" id="payoutAction">
+                    
+                    <div class="form-group">
+                        <label for="adminNotes">Admin Notes (Optional):</label>
+                        <textarea class="form-control" name="admin_notes" id="adminNotes" rows="3" 
+                                  placeholder="Optional notes about this payout..."></textarea>
+                    </div>
+                    
+                    <div class="form-group" id="rejectionReasonGroup" style="display: none;">
+                        <label for="rejectionReason">Rejection Reason:</label>
+                        <textarea class="form-control" name="rejection_reason" id="rejectionReason" rows="2" 
+                                  placeholder="Please provide a reason for rejection..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn" id="processPayoutBtn">Process</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function processPayoutModal(payoutId, action) {
+    const modal = document.getElementById('processPayoutModal');
+    const form = document.getElementById('processPayoutForm');
+    const title = document.getElementById('processPayoutModalTitle');
+    const actionInput = document.getElementById('payoutAction');
+    const button = document.getElementById('processPayoutBtn');
+    const rejectionGroup = document.getElementById('rejectionReasonGroup');
+    const adminNotesTextarea = document.getElementById('adminNotes');
+    const rejectionReasonTextarea = document.getElementById('rejectionReason');
+    
+    // Set form action URL
+    form.action = `/admin/payouts/${payoutId}/process`;
+    
+    // Set action
+    actionInput.value = action;
+    
+    // Clear previous form data
+    adminNotesTextarea.value = '';
+    rejectionReasonTextarea.value = '';
+    
+    // Update UI based on action
+    if (action === 'approve') {
+        title.textContent = 'Approve Payout';
+        button.textContent = 'Approve';
+        button.className = 'btn btn-success';
+        rejectionGroup.style.display = 'none';
+        // Make rejection reason not required
+        rejectionReasonTextarea.removeAttribute('required');
+    } else {
+        title.textContent = 'Reject Payout';
+        button.textContent = 'Reject';
+        button.className = 'btn btn-danger';
+        rejectionGroup.style.display = 'block';
+        // Make rejection reason required for rejection
+        rejectionReasonTextarea.setAttribute('required', 'required');
+    }
+    
+    // Show modal using Bootstrap 5 syntax
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+}
+
+// Handle form submission with loading state
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('processPayoutForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const submitBtn = document.getElementById('processPayoutBtn');
+            const action = document.getElementById('payoutAction').value;
+            const rejectionReason = document.getElementById('rejectionReason').value;
+            
+            // Validate rejection reason if action is reject
+            if (action === 'reject' && !rejectionReason.trim()) {
+                e.preventDefault();
+                alert('Please provide a rejection reason.');
+                return false;
+            }
+            
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                const originalText = submitBtn.textContent;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+                
+                // Re-enable button after 10 seconds in case of error
+                setTimeout(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }, 10000);
+            }
+        });
+    }
+});
+
+// Auto-refresh every 30 seconds
+setInterval(function() {
+    location.reload();
+}, 30000);
+</script>
+
+<style>
+.statistic {
+    text-align: center;
+    padding: 10px;
+}
+
+.statistic .value {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #007bff;
+}
+
+.statistic .label {
+    font-size: 0.9em;
+    color: #6c757d;
+}
+
+.bg-info {
+    background-color: #0dcaf0 !important;
+}
+</style>
+{% endblock %}

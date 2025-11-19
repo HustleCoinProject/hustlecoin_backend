@@ -76,6 +76,14 @@
                             Dashboard
                         </a>
                         
+                        <a class="nav-link {% if '/admin/payouts' in request.url.path %}active{% endif %}" 
+                           href="/admin/payouts/pending">
+                            <i class="fas fa-money-bill-wave me-2"></i>
+                            Payout Management
+                        </a>
+                        
+                        <hr class="text-white-50 mx-3">
+                        
                         {% for model_name, model_class in collections.items() %}
                         <a class="nav-link {% if model_name in request.url.path %}active{% endif %}" 
                            href="/admin/collection/{{ model_name }}">

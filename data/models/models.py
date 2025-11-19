@@ -48,6 +48,15 @@ class User(Document):
     # For land income claiming system
     last_land_claim_at: datetime | None = None  # Last time user claimed land income
     
+    # Payout information fields
+    phone_number: str | None = None  # For Angola Multicaixa Express transfers
+    full_name: str | None = None  # Full name for transfers
+    national_id: str | None = None  # National ID for verification
+    
+    # Bank transfer information
+    bank_iban: str | None = None  # IBAN for bank transfers
+    bank_name: str | None = None  # Bank name
+    
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
@@ -79,3 +88,41 @@ class LandTile(Document):
 
     class Settings:
         name = "land_tiles"
+
+
+# ===== PAYOUT MODEL =====
+
+class Payout(Document):
+    user_id: Indexed(PydanticObjectId)
+    amount_hc: int  # Amount in HustleCoin
+    amount_kwanza: float  # Amount in Kwanza (HC / conversion_rate)
+    conversion_rate: float = 10.0  # Default: 1 Kwanza = 10 HC
+    
+    # Payout method: "multicaixa_express" or "bank_transfer"
+    payout_method: str
+    
+    # Multicaixa Express fields
+    phone_number: str | None = None
+    full_name: str | None = None
+    national_id: str | None = None
+    
+    # Bank transfer fields
+    bank_iban: str | None = None
+    bank_name: str | None = None
+    
+    # Status: "pending" | "completed" | "rejected"
+    status: str = "pending"
+    
+    # Admin notes and processing info
+    admin_notes: str | None = None
+    processed_by: str | None = None  # Admin username who processed it
+    processed_at: datetime | None = None
+    
+    # Rejection reason (if status is rejected)
+    rejection_reason: str | None = None
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "payouts"

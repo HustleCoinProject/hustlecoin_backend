@@ -1,7 +1,6 @@
 # FastAPI-specific
 fastapi==0.119.0
 uvicorn==0.38.0
-uvloop==0.22.1
 httptools==0.7.1
 watchfiles==1.1.1
 python-dotenv==1.1.1
@@ -14,6 +13,8 @@ itsdangerous==2.2.0
 beanie==2.0.0
 motor==3.7.1
 
+pydantic-settings==2.12.0
+
 
 # Multipart Forms
 python-multipart==0.0.20
@@ -21,7 +22,7 @@ python-multipart==0.0.20
 
 # Encryption
 passlib==1.7.4
-bcrypt==5.0.0
+bcrypt==4.3.0
 python-jose==3.5.0
 cryptography==46.0.3
 ecdsa==0.19.1

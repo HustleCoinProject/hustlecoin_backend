@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from core.database import init_db
-from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping
+from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts
 from admin import admin_router
 from admin.registry import auto_register_models
 
@@ -38,6 +38,7 @@ app.include_router(hustles.router)
 app.include_router(shop.router)
 app.include_router(land.router)
 app.include_router(tapping.router)
+app.include_router(payouts.router)
 
 # Add the dev router here
 app.include_router(dev.router)
@@ -52,6 +53,19 @@ app.include_router(admin_router)
 async def get_server_time():
     """Returns the current server time in a specific format."""
     return {"timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/api/system/info", response_model=dict)
+async def get_system_info():
+    """Returns system information including payout conversion rates."""
+    from core.config import settings
+    return {
+        "payout_conversion_rate": settings.PAYOUT_CONVERSION_RATE,
+        "minimum_payout_hc": settings.MINIMUM_PAYOUT_HC,
+        "minimum_payout_kwanza": settings.MINIMUM_PAYOUT_KWANZA,
+        "land_price": settings.LAND_PRICE,
+        "land_income_per_day": settings.LAND_INCOME_PER_DAY
+    }
 
 
 @app.get("/", tags=["Root"])

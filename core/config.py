@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     LAND_INCOME_PER_DAY: int = 50
     LAND_INCOME_ACCUMULATE: bool = False  # If True, income accumulates over days; if False, fixed daily amount
     
+    # Payout configuration
+    PAYOUT_CONVERSION_RATE: float = 10.0  # 1 Kwanza = 10 HC
+    MINIMUM_PAYOUT_HC: int = 100  # Minimum HC required for payout
+    MINIMUM_PAYOUT_KWANZA: float = 10.0  # Minimum Kwanza for payout
+    
     @property
     def LAND_INCOME_PER_SECOND(self) -> float:
         """Calculate land income per second from daily income"""
