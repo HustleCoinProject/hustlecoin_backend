@@ -2,22 +2,25 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 import json
+import asyncio
 from decimal import Decimal
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status, UploadFile, File, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from beanie import Document
+from beanie import Document, PydanticObjectId
 from pydantic import BaseModel
 
 from .models import AdminUser, AdminLoginRequest
 from .auth import get_current_admin_user, create_access_token
 from .registry import AdminRegistry
 from .crud import (get_pending_payouts, process_payout, 
-                   get_payout_statistics)
+                   get_payout_statistics, get_pending_payouts_for_csv, bulk_process_payouts)
 from core.config import JWT_SECRET_KEY, JWT_ALGORITHM
+from data.models.models import Payout
+from .background_tasks import process_payouts_background
 
 router = APIRouter(prefix="/admin", tags=["Admin Panel"])
 
@@ -415,17 +418,41 @@ async def collection_delete(
 # === PAYOUT MANAGEMENT ENDPOINTS ===
 
 @router.get("/payouts/pending", response_class=HTMLResponse)
-async def admin_pending_payouts(request: Request, admin_user: AdminUser = Depends(get_current_admin_user)):
+async def admin_pending_payouts(
+    request: Request, 
+    admin_user: AdminUser = Depends(get_current_admin_user),
+    csv_success: int = None,
+    csv_error: int = None,
+    count: int = None,
+    error_msg: str = None
+):
     """View pending payouts that need admin approval."""
     pending_payouts = await get_pending_payouts()
     stats = await get_payout_statistics()
+    
+    # Handle CSV upload feedback
+    message = None
+    message_type = None
+    
+    if csv_success == 1 and count:
+        message = f"✅ CSV uploaded successfully!\n📊 Processing {count} payouts in the background.\n⏳ You can safely close this browser - processing will continue.\n🔄 Refresh this page later to see updated results."
+        message_type = "success"
+    elif csv_error == 1:
+        if error_msg:
+            from urllib.parse import unquote
+            message = unquote(error_msg)
+        else:
+            message = "CSV upload failed. Please check your file and try again."
+        message_type = "error"
     
     return templates.TemplateResponse("payout_management.html", {
         "request": request,
         "admin_user": admin_user,
         "pending_payouts": pending_payouts,
         "stats": stats,
-        "collections": AdminRegistry.get_registered_models()
+        "collections": AdminRegistry.get_registered_models(),
+        "success": message if message_type == "success" else None,
+        "error": message if message_type == "error" else None
     })
 
 
@@ -440,7 +467,7 @@ async def admin_process_payout(
 ):
     """Process a payout (approve or reject)."""
     try:
-        from beanie import PydanticObjectId
+
         
         # Validate payout_id format
         try:
@@ -489,3 +516,158 @@ async def admin_process_payout(
 async def admin_payout_stats_api(admin_user: AdminUser = Depends(get_current_admin_user)):
     """API endpoint for payout statistics (for AJAX calls)."""
     return await get_payout_statistics()
+
+
+# === CSV BULK PAYOUT ENDPOINTS ===
+
+@router.get("/payouts/export-csv")
+async def export_pending_payouts_csv(admin_user: AdminUser = Depends(get_current_admin_user)):
+    """Export all pending payouts to CSV for bulk processing."""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    
+    # Get pending payouts data
+    csv_data = await get_pending_payouts_for_csv()
+    
+    if not csv_data:
+        raise HTTPException(status_code=404, detail="No pending payouts found")
+    
+    # Create CSV content
+    output = io.StringIO()
+    fieldnames = [
+        'payout_id', 'user_id', 'username', 'amount_hc', 'amount_kwanza', 
+        'payout_method', 'phone_number', 'full_name', 'national_id', 
+        'bank_iban', 'bank_name', 'created_at', 'action', 'admin_notes', 'rejection_reason'
+    ]
+    
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(csv_data)
+    
+    # Create response
+    csv_content = output.getvalue()
+    output.close()
+    
+    # Generate filename with timestamp
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"pending_payouts_{timestamp}.csv"
+    
+    # Return as streaming response
+    def iter_csv():
+        yield csv_content
+    
+    return StreamingResponse(
+        iter_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+
+@router.post("/payouts/import-csv")
+async def import_payouts_csv(
+    background_tasks: BackgroundTasks,
+    csv_file: UploadFile = File(...),
+    admin_user: AdminUser = Depends(get_current_admin_user)
+):
+    """Import CSV file to bulk process payouts - validate and start background processing."""
+    import csv
+    import io
+    from .models import PayoutCSVImportRow
+    
+    # Basic file validation
+    if not csv_file.filename.lower().endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Please upload a CSV file")
+    
+    # Read and parse CSV
+    csv_content = await csv_file.read()
+    csv_text = csv_content.decode('utf-8')
+    csv_reader = csv.DictReader(io.StringIO(csv_text))
+    
+    # Check required columns
+    required_columns = ['payout_id', 'action']
+    missing_columns = [col for col in required_columns if col not in csv_reader.fieldnames]
+    if missing_columns:
+        raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing_columns)}")
+    
+    # Validate all rows
+    validation_errors = []
+    payouts_to_process = []
+    
+    for row_num, row in enumerate(csv_reader, start=2):
+        payout_id = row.get('payout_id', '').strip()
+        action = row.get('action', '').strip()
+        admin_notes = row.get('admin_notes', '').strip()
+        rejection_reason = row.get('rejection_reason', '').strip()
+        
+        # Skip empty rows
+        if not action and not payout_id:
+            continue
+        
+        # Basic validation
+        if not payout_id or not action:
+            validation_errors.append(f"Row {row_num}: Missing payout_id or action")
+            continue
+        
+        if action.lower() not in ['approve', 'reject']:
+            validation_errors.append(f"Row {row_num}: Action must be 'approve' or 'reject'")
+            continue
+        
+        if action.lower() == 'reject' and not rejection_reason.strip():
+            validation_errors.append(f"Row {row_num}: Rejection reason required for 'reject' action")
+            continue
+        
+        # Validate payout exists and is pending
+        try:
+            payout = await Payout.get(PydanticObjectId(payout_id))
+            if not payout:
+                validation_errors.append(f"Row {row_num}: Payout {payout_id} not found")
+                continue
+            if payout.status != 'pending':
+                validation_errors.append(f"Row {row_num}: Payout {payout_id} is not pending (status: {payout.status})")
+                continue
+        except Exception as e:
+            validation_errors.append(f"Row {row_num}: Invalid payout_id or error: {str(e)}")
+            continue
+        
+        # Add to processing list
+        payouts_to_process.append({
+            'payout_id': payout_id,
+            'action': action.lower(),
+            'admin_notes': admin_notes,
+            'rejection_reason': rejection_reason
+        })
+    
+    # If validation errors, return to pending page with error
+    if validation_errors:
+        from urllib.parse import quote
+        error_summary = f"CSV validation failed: {len(validation_errors)} errors found"
+        error_details = "\\n".join(validation_errors[:5])  # Show first 5 errors
+        if len(validation_errors) > 5:
+            error_details += f"\\n... and {len(validation_errors) - 5} more errors"
+        
+        full_error = f"{error_summary}\\n\\n{error_details}"
+        encoded_error = quote(full_error[:400])  # URL-encode and limit length
+        
+        return RedirectResponse(
+            url=f"/admin/payouts/pending?csv_error=1&error_msg={encoded_error}",
+            status_code=status.HTTP_302_FOUND
+        )
+    
+    if not payouts_to_process:
+        return RedirectResponse(
+            url="/admin/payouts/pending?csv_error=1&error_msg=No valid payouts found to process",
+            status_code=status.HTTP_302_FOUND
+        )
+    
+    # Start background processing
+    background_tasks.add_task(process_payouts_background, payouts_to_process, admin_user.username)
+    
+    # Redirect with success
+    return RedirectResponse(
+        url=f"/admin/payouts/pending?csv_success=1&count={len(payouts_to_process)}",
+        status_code=status.HTTP_302_FOUND
+    )

@@ -92,7 +92,7 @@ async def process_payout(
     
     if payout.status != "pending":
         print(f"Payout is not in pending status. Current status: {payout.status}")
-        raise HTTPException(status_code=400, detail=f"Payout is not in pending status. Current status: {payout.status}")
+        raise HTTPException(status_code=400, detail=f"Cannot process payout {payout_id}: already {payout.status}")
     
     user = await User.get(payout.user_id)
     if not user:
@@ -162,3 +162,115 @@ async def get_payout_statistics() -> Dict[str, Any]:
     stats["pending_total_kwanza"] = sum(p.amount_kwanza for p in pending_payouts)
     
     return stats
+
+
+# === CSV Bulk Payout Functions ===
+
+async def get_pending_payouts_for_csv() -> List[Dict[str, Any]]:
+    """Get all pending payouts with user information for CSV export."""
+    payouts = await Payout.find({"status": "pending"}).sort("-created_at").to_list()
+    
+    csv_data = []
+    for payout in payouts:
+        # Get user information
+        user = await User.get(payout.user_id)
+        username = user.username if user else "Unknown User"
+        
+        csv_row = {
+            "payout_id": str(payout.id),
+            "user_id": str(payout.user_id),
+            "username": username,
+            "amount_hc": payout.amount_hc,
+            "amount_kwanza": payout.amount_kwanza,
+            "payout_method": payout.payout_method,
+            "phone_number": payout.phone_number or "",
+            "full_name": payout.full_name or "",
+            "national_id": payout.national_id or "",
+            "bank_iban": payout.bank_iban or "",
+            "bank_name": payout.bank_name or "",
+            "created_at": payout.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "action": "",  # To be filled by admin
+            "admin_notes": "",
+            "rejection_reason": ""
+        }
+        csv_data.append(csv_row)
+    
+    return csv_data
+
+
+async def bulk_process_payouts(
+    payouts_to_process: List[Dict[str, Any]], 
+    admin_username: str
+) -> Dict[str, Any]:
+    """Process multiple payouts in bulk based on CSV data."""
+    results = {
+        "processed": 0,
+        "failed": 0,
+        "errors": [],
+        "success_details": []
+    }
+    
+    for payout_data in payouts_to_process:
+        try:
+            payout_id = PydanticObjectId(payout_data['payout_id'])
+            action = payout_data['action'].lower()
+            admin_notes = payout_data.get('admin_notes', '')
+            rejection_reason = payout_data.get('rejection_reason', '')
+            
+            # Validate action
+            if action not in ['approve', 'reject']:
+                results["errors"].append({
+                    "payout_id": str(payout_id),
+                    "error": f"Invalid action: {action}. Must be 'approve' or 'reject'"
+                })
+                results["failed"] += 1
+                continue
+            
+            # Validate rejection reason if rejecting
+            if action == 'reject' and not rejection_reason.strip():
+                results["errors"].append({
+                    "payout_id": str(payout_id),
+                    "error": "Rejection reason is required when rejecting a payout"
+                })
+                results["failed"] += 1
+                continue
+            
+            # Process the payout using existing function
+            processed_payout = await process_payout(
+                payout_id=payout_id,
+                admin_username=admin_username,
+                action=action,
+                admin_notes=admin_notes,
+                rejection_reason=rejection_reason
+            )
+            
+            results["processed"] += 1
+            results["success_details"].append({
+                "payout_id": str(payout_id),
+                "action": action,
+                "status": processed_payout.status
+            })
+            
+        except HTTPException as e:
+            # Check if this is a "already processed" error and handle it differently
+            if "already" in str(e.detail).lower():
+                results["success_details"].append({
+                    "payout_id": str(payout_data.get('payout_id', 'Unknown')),
+                    "action": "skipped",
+                    "status": f"Already processed: {e.detail}"
+                })
+                results["processed"] += 1  # Count as processed since it's not an error
+            else:
+                results["errors"].append({
+                    "payout_id": payout_data.get('payout_id', 'Unknown'),
+                    "error": e.detail
+                })
+                results["failed"] += 1
+        except Exception as e:
+            results["errors"].append({
+                "payout_id": payout_data.get('payout_id', 'Unknown'),
+                "error": f"Unexpected error: {str(e)}"
+            })
+            results["failed"] += 1
+    
+    return results
