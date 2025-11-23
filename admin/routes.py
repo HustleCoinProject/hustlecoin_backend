@@ -552,7 +552,7 @@ async def export_pending_payouts_csv(admin_user: AdminUser = Depends(get_current
     
     # Generate filename with timestamp
     from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"pending_payouts_{timestamp}.csv"
     
     # Return as streaming response
