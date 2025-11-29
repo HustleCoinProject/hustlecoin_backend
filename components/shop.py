@@ -36,12 +36,12 @@ SHOP_ITEMS_CONFIG = {
         "item_type": "BOOSTER",
         "metadata": {"effect": "hc_multiplier", "value": 2, "duration_seconds": 3600} # 1 hour
     },
-    # "power_prestige": {
-    #     "item_id": "power_prestige", "name": "Power Prestige", "price": 200,
-    #     "description": "Increases Rank Point gains by 50% to help you climb the leaderboards.",
-    #     "item_type": "BOOSTER",
-    #     "metadata": {"effect": "rank_point_multiplier", "value": 1.5, "duration_seconds": 86400} # 1 day
-    # },
+    "power_prestige": {
+        "item_id": "power_prestige", "name": "Power Prestige", "price": 200,
+        "description": "Increases Rank Point gains by 50% to help you climb the leaderboards.",
+        "item_type": "BOOSTER",
+        "metadata": {"effect": "rank_point_multiplier", "value": 1.5, "duration_seconds": 86400} # 1 day
+    },
     "hustler_brain": {
         "item_id": "hustler_brain", "name": "Hustler Brain", "price": 90,
         "description": "Reduces the cooldown on your tasks by 50%.",
@@ -62,12 +62,12 @@ SHOP_ITEMS_CONFIG = {
     #     "metadata": {"effect": "add_to_safe_luck_fund", "value_percentage": 5} # Instant
     # },
     # --- Bundles ---
-    # "combo_boost_pack": {
-    #     "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 300,
-    #     "description": "A high-value bundle containing Speed Hustle, Double Coins, and Power Prestige.",
-    #     "item_type": "BUNDLE",
-    #     "metadata": {"contains": ["speed_hustle", "double_coins", "power_prestige"]}
-    # },
+    "combo_boost_pack": {
+        "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 300,
+        "description": "A high-value bundle containing Speed Hustle, Double Coins, and Power Prestige.",
+        "item_type": "BUNDLE",
+        "metadata": {"contains": ["speed_hustle", "double_coins", "power_prestige"]}
+    },
     # --- Access Keys ---
     "bronze_key": {
         "item_id": "bronze_key", "name": "Bronze Key", "price": 100,
