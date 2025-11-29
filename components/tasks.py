@@ -13,16 +13,17 @@ from core.game_logic import GameLogic
 router = APIRouter(prefix="/api/tasks", tags=["Tasks & Quizzes"])
 
 # --- Task Configuration ---
-# This dictionary defines all available tasks, their rewards, and cooldowns in seconds.
+# This dictionary defines all available tasks, their rewards, cooldowns in seconds, and rank points.
 # 'type' can be 'INSTANT' (like watching an ad) or 'QUIZ'.
+# 'rank_points' represent user activity and engagement - they don't decrease on purchases
 TASK_CONFIG = {
     # Daily login thing
-    "daily_check_in": {"reward": 50, "cooldown_seconds": 79200, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
+    "daily_check_in": {"reward": 50, "rank_points": 3, "cooldown_seconds": 79200, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
 
     # Daily tasks thing
-    "watch_ad": {"reward": 100, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
-    "daily_tap": {"reward": 50, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
-    "quiz_game": {"reward": 75, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
+    "watch_ad": {"reward": 100, "rank_points": 1, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
+    "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
+    "quiz_game": {"reward": 75, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
 }
 
 
@@ -31,6 +32,7 @@ class TaskInfo(BaseModel):
     task_id: str
     description: str
     reward: int
+    rank_points: int
     type: str
     cooldown_seconds: int
 
@@ -44,6 +46,8 @@ class TaskComplete(BaseModel):
 class BalanceUpdateResponse(BaseModel):
     message: str
     new_balance: int
+    new_rank_points: int
+    rank_points_earned: int
     cooldown_expires_at: datetime | None = None
 
 
@@ -51,6 +55,7 @@ class TaskStatus(BaseModel):
     task_id: str
     description: str
     reward: int
+    rank_points: int
     type: str
     cooldown_seconds: int
     is_available: bool
@@ -103,6 +108,8 @@ async def complete_task(
     updates_to_set = {}
 
     # --- Task-specific Logic ---
+    base_rank_points = config.get("rank_points", 0)
+    
     if task_id == "daily_check_in":
         base_reward_amount = config["reward"]
         today = date.today()
@@ -120,6 +127,10 @@ async def complete_task(
         # Calculate streak bonus (e.g., 10 HC per day, capped at 7 days)
         streak_bonus = min(new_streak, 7) * 10
         base_reward_amount += streak_bonus # Add bonus to base reward
+        
+        # Bonus rank points for streak (1 point per day of streak, capped at 7 days)
+        streak_rank_bonus = min(new_streak, 7) * 1
+        base_rank_points += streak_rank_bonus
         
         # Prepare the streak fields for updating
         updates_to_set[User.last_check_in_date] = today
@@ -144,7 +155,10 @@ async def complete_task(
 
         if quiz.correctAnswerIndex == payload["answerIndex"]:
             base_reward_amount = config["reward"]
+            # Quiz gives full rank points for correct answers
         else:
+            # Wrong answer gives no reward or rank points
+            base_rank_points = 0
             # If wrong, update cooldown expiry but give no reward and return a specific message
             actual_cooldown_seconds = await GameLogic.calculate_task_cooldown(
                 user=current_user,
@@ -165,33 +179,50 @@ async def complete_task(
 
     # --- Grant Reward and Update Cooldown ---
     cooldown_expiry = None
-
     final_reward: int = 0
+    final_rank_points: int = 0
     
     if base_reward_amount > 0:
         final_reward = await GameLogic.calculate_task_reward(
             user=current_user,
             base_reward=base_reward_amount
         )
-
-        # Set cooldown only if cooldown_seconds > 0
-        if config["cooldown_seconds"] > 0:
-            # Calculate actual cooldown with boosters applied
-            actual_cooldown_seconds = await GameLogic.calculate_task_cooldown(
-                user=current_user,
-                base_cooldown_seconds=config["cooldown_seconds"]
-            )
-            cooldown_expiry = datetime.utcnow() + timedelta(seconds=actual_cooldown_seconds)
-            updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
-        
-        await current_user.update(
-            Inc({User.hc_balance: final_reward, User.hc_earned_in_level: final_reward}),
-            Set(updates_to_set)
+    
+    if base_rank_points > 0:
+        final_rank_points = await GameLogic.calculate_rank_point_reward(
+            user=current_user,
+            base_rank_points=base_rank_points
         )
+
+    # Set cooldown only if cooldown_seconds > 0
+    if config["cooldown_seconds"] > 0:
+        # Calculate actual cooldown with boosters applied
+        actual_cooldown_seconds = await GameLogic.calculate_task_cooldown(
+            user=current_user,
+            base_cooldown_seconds=config["cooldown_seconds"]
+        )
+        cooldown_expiry = datetime.utcnow() + timedelta(seconds=actual_cooldown_seconds)
+        updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
+    
+    # Update user balance and rank points
+    update_inc = {}
+    if final_reward > 0:
+        update_inc[User.hc_balance] = final_reward
+        update_inc[User.hc_earned_in_level] = final_reward
+    if final_rank_points > 0:
+        update_inc[User.rank_points] = final_rank_points
+    
+    if update_inc or updates_to_set:
+        if update_inc:
+            await current_user.update(Inc(update_inc), Set(updates_to_set))
+        else:
+            await current_user.update(Set(updates_to_set))
 
     return BalanceUpdateResponse(
         message=f"Task '{task_id}' completed successfully!",
         new_balance=current_user.hc_balance + final_reward,
+        new_rank_points=current_user.rank_points + final_rank_points,
+        rank_points_earned=final_rank_points,
         cooldown_expires_at=cooldown_expiry
     )
 
@@ -231,6 +262,36 @@ async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
         question=quiz_doc.get(f"question_{user_lang}", quiz_doc["question_en"]),
         options=quiz_doc.get(f"options_{user_lang}", quiz_doc["options_en"])
     )
+
+
+@router.get("/status", response_model=List[TaskStatus])
+async def get_task_status(current_user: User = Depends(get_current_user)):
+    """Get the status of all tasks for the current user."""
+    now = datetime.utcnow()
+    task_statuses = []
+    
+    for task_id, config in TASK_CONFIG.items():
+        cooldown_expires_at = current_user.task_cooldowns.get(task_id)
+        is_available = cooldown_expires_at is None or now >= cooldown_expires_at
+        
+        seconds_until_available = None
+        if not is_available and cooldown_expires_at:
+            seconds_until_available = int((cooldown_expires_at - now).total_seconds())
+            seconds_until_available = max(0, seconds_until_available)
+        
+        task_statuses.append(TaskStatus(
+            task_id=task_id,
+            description=config["description"],
+            reward=config["reward"],
+            rank_points=config["rank_points"],
+            type=config["type"],
+            cooldown_seconds=config["cooldown_seconds"],
+            is_available=is_available,
+            cooldown_expires_at=cooldown_expires_at,
+            seconds_until_available=seconds_until_available
+        ))
+    
+    return task_statuses
 
 
 

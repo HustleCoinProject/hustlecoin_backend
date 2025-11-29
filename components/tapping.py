@@ -23,7 +23,9 @@ class TapResponse(BaseModel):
     success: bool
     message: str
     hc_earned: int
+    rank_points_earned: int
     new_balance: int
+    new_rank_points: int
     daily_earnings: int
     daily_limit: int
     remaining_taps: int
@@ -112,12 +114,23 @@ async def process_tap_batch(
         base_reward=base_hc_to_award
     )
     
-    # Update user's balance and daily tap earnings
+    # Calculate rank points (1 rank point per 20 taps, minimum 1 per session)
+    base_rank_points = max(1, base_hc_to_award // 20)
+    final_rank_points = await GameLogic.calculate_rank_point_reward(
+        user=current_user,
+        base_rank_points=base_rank_points
+    )
+    
+    # Update user's balance, rank points, and daily tap earnings
     new_daily_earnings = current_user.daily_tap_earnings + base_hc_to_award
     updates_to_set[User.daily_tap_earnings] = new_daily_earnings
     
     await current_user.update(
-        Inc({User.hc_balance: final_hc_reward, User.hc_earned_in_level: final_hc_reward}),
+        Inc({
+            User.hc_balance: final_hc_reward, 
+            User.hc_earned_in_level: final_hc_reward,
+            User.rank_points: final_rank_points
+        }),
         Set(updates_to_set)
     )
     
@@ -127,11 +140,37 @@ async def process_tap_batch(
     
     return TapResponse(
         success=True,
-        message=f"Successfully processed {tap_request.tap_count} taps! Earned {final_hc_reward} HC.",
+        message=f"Successfully processed {tap_request.tap_count} taps! Earned {final_hc_reward} HC and {final_rank_points} rank points.",
         hc_earned=final_hc_reward,
+        rank_points_earned=final_rank_points,
         new_balance=current_user.hc_balance + final_hc_reward,
+        new_rank_points=current_user.rank_points + final_rank_points,
         daily_earnings=new_daily_earnings,
         daily_limit=DAILY_TAP_LIMIT,
         remaining_taps=remaining_taps,
+        next_reset_at=next_reset_at
+    )
+
+
+@router.get("/status", response_model=TapStatusResponse)
+async def get_tap_status(current_user: User = Depends(get_current_user)):
+    """Get current tapping status for the user."""
+    today = date.today()
+    
+    # Reset daily earnings if it's a new day
+    if should_reset_daily_taps(current_user):
+        daily_earnings = 0
+    else:
+        daily_earnings = current_user.daily_tap_earnings
+    
+    remaining_taps = max(0, DAILY_TAP_LIMIT - daily_earnings)
+    can_tap = remaining_taps > 0
+    next_reset_at = get_next_reset_time() if not can_tap else None
+    
+    return TapStatusResponse(
+        daily_earnings=daily_earnings,
+        daily_limit=DAILY_TAP_LIMIT,
+        remaining_taps=remaining_taps,
+        can_tap=can_tap,
         next_reset_at=next_reset_at
     )

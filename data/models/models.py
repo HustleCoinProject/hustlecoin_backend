@@ -29,6 +29,7 @@ class User(Document):
     email: EmailStr = Field(..., unique=True, max_length=254)
     hashed_password: str
     hc_balance: int = 0
+    rank_points: int = 0  # Points that reflect user's activity and importance
     inventory: List[InventoryItem] = Field(default_factory=list)
     level: int = 1
     current_hustle: str = "Street Vendor" # Default starting hustle

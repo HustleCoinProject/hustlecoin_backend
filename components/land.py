@@ -116,11 +116,20 @@ async def buy_land_tile(h3_index: str, current_user: User = Depends(get_current_
     if await LandTile.find_one(LandTile.h3_index == h3_index):
         raise HTTPException(status_code=409, detail="This land tile is already owned.")
 
-    # Deduct cost and create the land tile
+    # Deduct cost, award rank points, and create the land tile
     # Note: In a high-concurrency system, this two-step process has a small race condition risk.
     # A more robust solution might use MongoDB transactions for multi-document atomicity.
     
-    await current_user.update(Inc({User.hc_balance: -settings.LAND_PRICE}))
+    # Award rank points for land purchase (5 points for investing in land)
+    land_purchase_rank_points = await GameLogic.calculate_rank_point_reward(
+        user=current_user,
+        base_rank_points=5
+    )
+    
+    await current_user.update(Inc({
+        User.hc_balance: -settings.LAND_PRICE,
+        User.rank_points: land_purchase_rank_points
+    }))
     
 
     now = datetime.utcnow()
@@ -139,7 +148,13 @@ async def buy_land_tile(h3_index: str, current_user: User = Depends(get_current_
         await current_user.update(Inc({User.hc_balance: settings.LAND_PRICE}))
         raise HTTPException(status_code=500, detail="Failed to purchase tile. Please try again.")
 
-    return {"message": "Land purchased successfully!", "h3_index": h3_index, "new_balance": current_user.hc_balance - settings.LAND_PRICE}
+    return {
+        "message": f"Land purchased successfully! Earned {land_purchase_rank_points} rank points.", 
+        "h3_index": h3_index, 
+        "new_balance": current_user.hc_balance - settings.LAND_PRICE,
+        "rank_points_earned": land_purchase_rank_points,
+        "new_rank_points": current_user.rank_points + land_purchase_rank_points
+    }
 
 
 @router.post("/sell/{h3_index}")

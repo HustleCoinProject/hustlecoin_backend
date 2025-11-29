@@ -43,6 +43,7 @@ class EffectProcessor:
             'land_income_multiplier': 1.0,
             'task_speed_multiplier': 1.0,
             'cooldown_reduction_percentage': 0.0,
+            'rank_point_multiplier': 1.0,
             'access_levels': [],
             'flat_bonuses': {}
         }
@@ -104,6 +105,13 @@ def apply_access_level(modifiers: Dict[str, Any], item_config: Dict[str, Any], i
     access_level = item_config["metadata"].get("access_level")
     if access_level and access_level not in modifiers['access_levels']:
         modifiers['access_levels'].append(access_level)
+
+@EffectProcessor.register_effect("rank_point_multiplier")
+def apply_rank_point_multiplier(modifiers: Dict[str, Any], item_config: Dict[str, Any], item, context: str, **kwargs):
+    """Multiplies rank point gains"""
+    if context == 'rank_point_reward':
+        multiplier = item_config["metadata"].get("value", 1.0)
+        modifiers['rank_point_multiplier'] *= multiplier
 
 
 class GameLogic:
@@ -263,3 +271,41 @@ class GameLogic:
             'active_effects': active_effects,
             'total_active_effects': len(active_effects)
         }
+    
+    @staticmethod
+    async def calculate_rank_point_reward(user: User, base_rank_points: int) -> int:
+        """
+        Calculates the final rank points earned after applying all active
+        boosters and the user's level multiplier.
+        
+        Rank points represent user activity and importance in the game.
+        They increase based on:
+        - Task completion (base points based on task difficulty)
+        - Daily check-ins and streaks
+        - Land purchases and management
+        - Tapping activity
+        - Quiz participation
+        - Overall game engagement
+        
+        Args:
+            user: The User document object.
+            base_rank_points: The base rank points for the completed action.
+            
+        Returns:
+            The final, calculated rank points as an integer.
+        """
+        modifiers = EffectProcessor.apply_effects(user, 'rank_point_reward', base_rank_points=base_rank_points)
+        
+        # Apply rank point multiplier
+        modified_points = float(base_rank_points) * modifiers['rank_point_multiplier']
+        
+        # Apply flat bonuses if any
+        for bonus_type, bonus_value in modifiers['flat_bonuses'].items():
+            if bonus_type == 'rank_points_flat_bonus':
+                modified_points += bonus_value
+        
+        # Apply a smaller level multiplier for rank points (to prevent extreme scaling)
+        level_multiplier = 1 + (user.level - 1) * 0.05  # 5% increase per level
+        final_points = modified_points * level_multiplier
+
+        return round(final_points)

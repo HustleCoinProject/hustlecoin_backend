@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     username: str
     email: EmailStr
     hc_balance: int = 0
+    rank_points: int = 0
     level: int = 1
     current_hustle: Dict[str, str]  # Changed to Dict[str, str] for localized key-value pair
     level_entry_date: datetime
