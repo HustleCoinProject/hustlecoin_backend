@@ -1,9 +1,10 @@
 # components/shop.py
 from datetime import datetime, timedelta
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
-from beanie.operators import Inc, Push
+from beanie.operators import Inc, Push, And
 
 from data.models import User, InventoryItem
 from core.security import get_current_user
@@ -145,7 +146,9 @@ async def list_shop_items(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/purchase")
+@api_limiter.limit("10/minute")
 async def purchase_item(
+    request: Request,
     purchase_data: PurchaseRequest,
     current_user: User = Depends(get_current_user)
 ):
@@ -158,14 +161,20 @@ async def purchase_item(
     translated_item_name = translate_text(item_data["name"], current_user.language)
     total_cost = item_to_buy.price * purchase_data.quantity
     
+    # Check balance first, but will do atomic check during update
     if current_user.hc_balance < total_cost:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin.")
 
     # --- Handle special instant-effect items ---
     if item_to_buy.item_type == "SPECIAL":
-        # Note: A real implementation would require a global state model.
-        # For now, we just deduct the cost and return a message.
-        await current_user.update(Inc({User.hc_balance: -total_cost}))
+        # Atomic deduction for special items with balance verification
+        from beanie.operators import And
+        update_result = await User.find_one(
+            And(User.id == current_user.id, User.hc_balance >= total_cost)
+        ).update(Inc({User.hc_balance: -total_cost}))
+        
+        if not update_result:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin or concurrent purchase detected.")
         return {
             "message": f"Successfully activated {translated_item_name}!",
             "new_balance": current_user.hc_balance - total_cost
@@ -191,11 +200,17 @@ async def purchase_item(
             
             inventory_additions.append(new_inventory_item.model_dump())
         
-        # Atomically deduct cost and push all bundle items to inventory
-        await current_user.update(
+        # Atomically deduct cost and push all bundle items to inventory with balance check
+        from beanie.operators import And
+        update_result = await User.find_one(
+            And(User.id == current_user.id, User.hc_balance >= total_cost)
+        ).update(
             Inc({User.hc_balance: -total_cost}),
             Push({User.inventory: {"$each": inventory_additions}})
         )
+        
+        if not update_result:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin or concurrent purchase detected.")
         return {
             "message": f"Successfully purchased bundle: {translated_item_name}!",
             "new_balance": current_user.hc_balance - total_cost
@@ -212,10 +227,17 @@ async def purchase_item(
         duration = timedelta(seconds=item_to_buy.metadata["duration_seconds"])
         new_inventory_item.expires_at = datetime.utcnow() + (duration * purchase_data.quantity)
         
-    await current_user.update(
+    # Atomic purchase with balance verification
+    from beanie.operators import And
+    update_result = await User.find_one(
+        And(User.id == current_user.id, User.hc_balance >= total_cost)
+    ).update(
         Inc({User.hc_balance: -total_cost}),
         Push({User.inventory: new_inventory_item.model_dump()})
     )
+    
+    if not update_result:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin or concurrent purchase detected.")
     
     return {
         "message": f"Successfully purchased {purchase_data.quantity} x {translated_item_name}!",

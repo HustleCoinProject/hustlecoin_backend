@@ -8,13 +8,14 @@ except Exception:  # pragma: no cover
     # Pydantic v1 fallback
     from pydantic import validator
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Dict, List
 
 from data.models import User, InventoryItem
 from core.security import (create_access_token, create_refresh_token, get_current_user,
                            get_password_hash, verify_password, verify_refresh_token)
+from core.rate_limiter_slowapi import auth_limiter
 from core.game_logic import GameLogic
 from components.shop import SHOP_ITEMS_CONFIG
 from core.translations import translate_text
@@ -127,7 +128,8 @@ def _create_user_out_response(user: User) -> Dict:
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
-async def register_user(user_data: UserRegister):
+@auth_limiter.limit("5/minute")
+async def register_user(request: Request, user_data: UserRegister):
     if await User.find_one(User.email == user_data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
     if await User.find_one(User.username == user_data.username):
@@ -155,7 +157,8 @@ async def register_user(user_data: UserRegister):
 
 
 @router.post("/login", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+@auth_limiter.limit("5/minute")
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     user = await User.find_one(User.username == form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")

@@ -25,11 +25,11 @@ class InventoryItem(BaseModel):
 
 
 class User(Document):
-    username: str = Field(..., unique=True, min_length=3, max_length=30)
-    email: EmailStr = Field(..., unique=True, max_length=254)
+    username: Indexed(str, unique=True) = Field(..., min_length=3, max_length=30)
+    email: Indexed(EmailStr, unique=True) = Field(..., max_length=254)
     hashed_password: str
     hc_balance: int = 0
-    rank_points: int = 0  # Points that reflect user's activity and importance
+    rank_points: Indexed(int) = 0  # Points that reflect user's activity and importance
     inventory: List[InventoryItem] = Field(default_factory=list)
     level: int = 1
     current_hustle: str = "Street Vendor" # Default starting hustle
@@ -112,7 +112,7 @@ class Payout(Document):
     bank_name: str | None = None
     
     # Status: "pending" | "completed" | "rejected"
-    status: str = "pending"
+    status: Indexed(str) = "pending"
     
     # Admin notes and processing info
     admin_notes: str | None = None
@@ -127,3 +127,7 @@ class Payout(Document):
 
     class Settings:
         name = "payouts"
+        indexes = [
+            [("user_id", 1), ("created_at", -1)],  # For user payout history
+            [("status", 1), ("created_at", -1)]      # For admin pending payouts
+        ]

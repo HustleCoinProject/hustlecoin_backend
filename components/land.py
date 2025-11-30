@@ -1,7 +1,8 @@
 import h3
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
 from beanie import PydanticObjectId
 from beanie.operators import Inc, In, Set
@@ -104,7 +105,12 @@ async def get_my_lands(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/buy/{h3_index}", status_code=status.HTTP_201_CREATED)
-async def buy_land_tile(h3_index: str, current_user: User = Depends(get_current_user)):
+@api_limiter.limit("10/minute")
+async def buy_land_tile(
+    request: Request,
+    h3_index: str, 
+    current_user: User = Depends(get_current_user)
+):
     """Purchases a single land tile for the current user."""
     if not h3.is_valid_cell(h3_index):
         raise HTTPException(status_code=400, detail="Invalid H3 tile index.")
@@ -112,41 +118,59 @@ async def buy_land_tile(h3_index: str, current_user: User = Depends(get_current_
     if current_user.hc_balance < settings.LAND_PRICE:
         raise HTTPException(status_code=402, detail="Insufficient HustleCoin to buy land.")
         
-    # Check if tile is already owned
-    if await LandTile.find_one(LandTile.h3_index == h3_index):
-        raise HTTPException(status_code=409, detail="This land tile is already owned.")
-
-    # Deduct cost, award rank points, and create the land tile
-    # Note: In a high-concurrency system, this two-step process has a small race condition risk.
-    # A more robust solution might use MongoDB transactions for multi-document atomicity.
-    
     # Award rank points for land purchase (5 points for investing in land)
     land_purchase_rank_points = await GameLogic.calculate_rank_point_reward(
         user=current_user,
         base_rank_points=5
     )
     
-    await current_user.update(Inc({
-        User.hc_balance: -settings.LAND_PRICE,
-        User.rank_points: land_purchase_rank_points
-    }))
-    
-
     now = datetime.utcnow()
     new_tile = LandTile(
         h3_index=h3_index,
         owner_id=current_user.id,
         purchase_price=settings.LAND_PRICE,
         purchased_at=now,
-        last_income_payout_at=now # ### EXPLICITLY SET ###
+        last_income_payout_at=now
     )
 
-    try:
-        await new_tile.create()
-    except Exception:
-        # Compensating action: Refund the user if tile creation fails (e.g., duplicate key on race)
-        await current_user.update(Inc({User.hc_balance: settings.LAND_PRICE}))
-        raise HTTPException(status_code=500, detail="Failed to purchase tile. Please try again.")
+    # Use MongoDB transaction to prevent race conditions
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from beanie import get_beanie_client
+    
+    client = get_beanie_client()
+    async with await client.start_session() as session:
+        async with session.start_transaction():
+            try:
+                # Check if tile is already owned within transaction
+                existing_tile = await LandTile.find_one(
+                    LandTile.h3_index == h3_index,
+                    session=session
+                )
+                if existing_tile:
+                    raise HTTPException(status_code=409, detail="This land tile is already owned.")
+                
+                # Check user balance within transaction
+                current_user_in_tx = await User.get(current_user.id, session=session)
+                if current_user_in_tx.hc_balance < settings.LAND_PRICE:
+                    raise HTTPException(status_code=402, detail="Insufficient HustleCoin to buy land.")
+                
+                # Atomic operations within transaction
+                await current_user_in_tx.update(
+                    Inc({
+                        User.hc_balance: -settings.LAND_PRICE,
+                        User.rank_points: land_purchase_rank_points
+                    }),
+                    session=session
+                )
+                
+                await new_tile.insert(session=session)
+                
+            except HTTPException:
+                # Let HTTP exceptions bubble up (these are business logic errors)
+                raise
+            except Exception as e:
+                # Handle any other errors
+                raise HTTPException(status_code=500, detail="Failed to purchase tile. Please try again.")
 
     return {
         "message": f"Land purchased successfully! Earned {land_purchase_rank_points} rank points.", 

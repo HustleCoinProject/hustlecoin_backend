@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     MINIMUM_PAYOUT_HC: int = 100  # Minimum HC required for payout
     MINIMUM_PAYOUT_KWANZA: float = 10.0  # Minimum Kwanza for payout
     
+    # Redis configuration for rate limiting
+    REDIS_URL: str = "redis://localhost:6379/0"
+    
     @property
     def LAND_INCOME_PER_SECOND(self) -> float:
         """Calculate land income per second from daily income"""

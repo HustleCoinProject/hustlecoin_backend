@@ -1,7 +1,8 @@
 # components/tasks.py
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
 from beanie import PydanticObjectId
 from beanie.operators import Inc, Set
@@ -85,7 +86,9 @@ async def get_all_tasks():
 
 
 @router.post("/complete", response_model=BalanceUpdateResponse)
+@api_limiter.limit("20/minute")
 async def complete_task(
+    request: Request,
     completion_data: TaskComplete,
     current_user: User = Depends(get_current_user)
 ):

@@ -1,9 +1,10 @@
 # components/tapping.py
 from datetime import datetime, date, timedelta
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
-from beanie.operators import Inc, Set
+from beanie.operators import Inc, Set, And
 
 from data.models import User
 from core.security import get_current_user
@@ -56,7 +57,9 @@ def should_reset_daily_taps(user: User) -> bool:
     return user.last_tap_reset_date != today
 
 @router.post("/tap", response_model=TapResponse)
+@api_limiter.limit("100/minute")
 async def process_tap_batch(
+    request: Request,
     tap_request: TapRequest,
     current_user: User = Depends(get_current_user)
 ):
@@ -121,11 +124,18 @@ async def process_tap_batch(
         base_rank_points=base_rank_points
     )
     
-    # Update user's balance, rank points, and daily tap earnings
+    # Atomic update to prevent race conditions in daily earnings
     new_daily_earnings = current_user.daily_tap_earnings + base_hc_to_award
     updates_to_set[User.daily_tap_earnings] = new_daily_earnings
     
-    await current_user.update(
+    # Use atomic update with condition to ensure daily earnings don't exceed limit
+    from beanie.operators import And
+    update_result = await User.find_one(
+        And(
+            User.id == current_user.id,
+            User.daily_tap_earnings <= DAILY_TAP_LIMIT - base_hc_to_award
+        )
+    ).update(
         Inc({
             User.hc_balance: final_hc_reward, 
             User.hc_earned_in_level: final_hc_reward,
@@ -133,6 +143,16 @@ async def process_tap_batch(
         }),
         Set(updates_to_set)
     )
+    
+    if not update_result:
+        # Race condition detected or limit exceeded
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "Daily tap limit reached or concurrent tapping detected.",
+                "next_reset_at": get_next_reset_time().isoformat()
+            }
+        )
     
     # Calculate remaining taps for response
     remaining_taps = max(0, DAILY_TAP_LIMIT - new_daily_earnings)

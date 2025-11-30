@@ -37,6 +37,10 @@ h3==4.3.1
 # For testing simulation (temporary)
 faker==37.11.0
 
+# Rate Limiting
+slowapi==0.1.9
+redis==7.1.0
+
 # Pinned Sub-dependencies (These ensure the server matches local Python 3.11 environment exactly)
 starlette==0.48.0
 anyio==4.11.0
