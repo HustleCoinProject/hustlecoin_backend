@@ -4,11 +4,36 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
-from beanie.operators import Inc, Push, And
+from beanie.operators import Inc, Push, And, Set
 
 from data.models import User, InventoryItem
 from core.security import get_current_user
 from core.translations import translate_text, translate_dict_values
+
+
+def clean_and_update_inventory(current_inventory: List[InventoryItem], new_item: InventoryItem) -> List[InventoryItem]:
+    """
+    Clean expired items and replace existing items of the same type.
+    Returns the cleaned and updated inventory list.
+    """
+    now = datetime.utcnow()
+    cleaned_inventory = []
+    
+    # Filter out expired items and items of the same type as the new item
+    for item in current_inventory:
+        # Skip expired items (cleanup)
+        if item.expires_at and item.expires_at <= now:
+            continue
+        # Skip items of the same type (will be replaced by new item)
+        if item.item_id == new_item.item_id:
+            continue
+        # Keep all other items
+        cleaned_inventory.append(item)
+    
+    # Add the new item
+    cleaned_inventory.append(new_item)
+    
+    return cleaned_inventory
 
 
 
@@ -187,7 +212,9 @@ async def purchase_item(
             raise HTTPException(status_code=400, detail="Can only purchase one bundle at a time.")
         
         bundle_items = item_to_buy.metadata.get("contains", [])
-        inventory_additions = []
+        
+        # Process each bundle item and clean/update inventory
+        updated_inventory = current_user.inventory.copy()
         for sub_item_id in bundle_items:
             sub_item_data = SHOP_ITEMS_CONFIG.get(sub_item_id)
             if not sub_item_data: continue # Skip if an item in bundle is misconfigured
@@ -198,15 +225,19 @@ async def purchase_item(
                 duration = timedelta(seconds=sub_item_data["metadata"]["duration_seconds"])
                 new_inventory_item.expires_at = datetime.utcnow() + duration
             
-            inventory_additions.append(new_inventory_item.model_dump())
+            # Clean expired items and replace same items for each bundle item
+            updated_inventory = clean_and_update_inventory(updated_inventory, new_inventory_item)
         
-        # Atomically deduct cost and push all bundle items to inventory with balance check
+        # Convert to model_dump format for database update
+        inventory_dicts = [item.model_dump() if hasattr(item, 'model_dump') else item for item in updated_inventory]
+        
+        # Atomically deduct cost and set new inventory with balance check
         from beanie.operators import And
         update_result = await User.find_one(
             And(User.id == current_user.id, User.hc_balance >= total_cost)
         ).update(
             Inc({User.hc_balance: -total_cost}),
-            Push({User.inventory: {"$each": inventory_additions}})
+            Set({User.inventory: inventory_dicts})
         )
         
         if not update_result:
@@ -226,6 +257,12 @@ async def purchase_item(
     if "duration_seconds" in item_to_buy.metadata:
         duration = timedelta(seconds=item_to_buy.metadata["duration_seconds"])
         new_inventory_item.expires_at = datetime.utcnow() + (duration * purchase_data.quantity)
+    
+    # Clean expired items and replace same items, then get updated inventory
+    updated_inventory = clean_and_update_inventory(current_user.inventory, new_inventory_item)
+    
+    # Convert to model_dump format for database update
+    inventory_dicts = [item.model_dump() if hasattr(item, 'model_dump') else item for item in updated_inventory]
         
     # Atomic purchase with balance verification
     from beanie.operators import And
@@ -233,7 +270,7 @@ async def purchase_item(
         And(User.id == current_user.id, User.hc_balance >= total_cost)
     ).update(
         Inc({User.hc_balance: -total_cost}),
-        Push({User.inventory: new_inventory_item.model_dump()})
+        Set({User.inventory: inventory_dicts})
     )
     
     if not update_result:
