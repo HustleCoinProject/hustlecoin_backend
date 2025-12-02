@@ -26,18 +26,70 @@
                 </div>
                 {% endif %}
 
-                <form method="post" {% if is_edit %}action="/admin/collection/{{ model_name }}/edit/{{ document_id }}"{% else %}action="/admin/collection/{{ model_name }}/create"{% endif %}>
-                    {% for field_name, field_info in field_info.items() %}
-                    {% if not field_info.is_hidden and not field_info.is_readonly %}
+                {% if readonly_fields %}
+                <!-- READONLY FIELDS SECTION (View-Only) -->
+                <div class="mb-4">
+                    <h6 class="text-muted border-bottom pb-2 mb-3">
+                        <i class="fas fa-eye me-2"></i>
+                        Read-Only Fields <small class="text-muted">(Cannot be modified for data safety)</small>
+                    </h6>
+                    
+                    {% for field_name, field_info in readonly_fields.items() %}
                     <div class="mb-3">
-                        <label for="{{ field_name }}" class="form-label">
+                        <label class="form-label">
                             {{ field_info.verbose_name }}
-                            {% if field_info.is_required %}
-                            <span class="text-danger">*</span>
+                            {% if field_info.is_system_field %}
+                            <span class="badge bg-warning text-dark">System</span>
+                            {% elif not field_info.is_safe_to_edit %}
+                            <span class="badge bg-info">Complex Type</span>
                             {% endif %}
                         </label>
-
+                        
                         {% set current_value = document.get(field_name, '') %}
+                        {% if current_value is none %}
+                        <div class="form-control-plaintext text-muted">
+                            <em>None</em>
+                        </div>
+                        {% else %}
+                        <div class="form-control-plaintext">
+                            {% if field_info.widget in ['json_array', 'json_object', 'json'] %}
+                            <pre class="bg-light p-2 rounded small">{% if current_value is string %}{{ current_value }}{% else %}{{ current_value | safe_json }}{% endif %}</pre>
+                            {% elif current_value.strftime is defined %}
+                            {{ current_value.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                            {% else %}
+                            {{ current_value }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if field_info.help_text %}
+                        <div class="form-text">{{ field_info.help_text }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if editable_fields %}
+                <!-- EDITABLE FIELDS SECTION (Form Inputs) -->
+                <div class="mb-4">
+                    <h6 class="text-success border-bottom pb-2 mb-3">
+                        <i class="fas fa-edit me-2"></i>
+                        Editable Fields <small class="text-muted">(Safe to modify)</small>
+                    </h6>
+                    
+                    <form method="post" {% if is_edit %}action="/admin/collection/{{ model_name }}/edit/{{ document_id }}"{% else %}action="/admin/collection/{{ model_name }}/create"{% endif %}>
+                        {% for field_name, field_info in editable_fields.items() %}
+                        <div class="mb-3">
+                            <label for="{{ field_name }}" class="form-label">
+                                {{ field_info.verbose_name }}
+                                {% if field_info.is_required %}
+                                <span class="text-danger">*</span>
+                                {% endif %}
+                                <span class="badge bg-success">Safe</span>
+                            </label>
+
+                            {% set current_value = document.get(field_name, '') %}
 
                         {% if field_info.widget == 'checkbox' %}
                         <div class="form-check">
@@ -57,6 +109,12 @@
                         {% elif field_info.widget == 'textarea' %}
                         <textarea class="form-control" id="{{ field_name }}" name="{{ field_name }}" 
                                   rows="4" {% if field_info.is_required %}required{% endif %}>{{ current_value }}</textarea>
+
+                        {% elif field_info.widget == 'date' %}
+                        <input type="date" class="form-control" 
+                               id="{{ field_name }}" name="{{ field_name }}" 
+                               value="{% if current_value %}{% if current_value.strftime is defined %}{{ current_value.strftime('%Y-%m-%d') }}{% else %}{{ current_value }}{% endif %}{% endif %}"
+                               {% if field_info.is_required %}required{% endif %}>
 
                         {% elif field_info.widget == 'datetime' %}
                         <input type="datetime-local" class="form-control" 
@@ -96,24 +154,35 @@
                                {% if field_info.is_required %}required{% endif %}>
                         {% endif %}
 
-                        {% if field_info.help_text %}
-                        <div class="form-text">{{ field_info.help_text }}</div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    {% endfor %}
+                            {% if field_info.help_text %}
+                            <div class="form-text">{{ field_info.help_text }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
 
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save me-2"></i>
-                            {% if is_edit %}Update{% else %}Create{% endif %}
-                        </button>
-                        <a href="/admin/collection/{{ model_name }}" class="btn btn-secondary">
-                            <i class="fas fa-times me-2"></i>
-                            Cancel
-                        </a>
-                    </div>
-                </form>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>
+                                {% if is_edit %}Update{% else %}Create{% endif %} (Safe Mode)
+                            </button>
+                            <a href="/admin/collection/{{ model_name }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-2"></i>
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+                {% else %}
+                <!-- NO EDITABLE FIELDS -->
+                <div class="alert alert-warning">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>No editable fields available.</strong> All fields are either system-managed or complex types that cannot be safely edited through the admin interface.
+                </div>
+                <a href="/admin/collection/{{ model_name }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Back to List
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>

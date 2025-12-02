@@ -218,12 +218,14 @@ async def collection_create_form(
     model_name: str,
     admin_user: AdminUser = Depends(get_current_admin_user)
 ):
-    """Show form to create new document."""
+    """Show form to create new document - separates editable from readonly fields."""
     model_class = AdminRegistry.get_model(model_name)
     if not model_class:
         raise HTTPException(status_code=404, detail="Collection not found")
     
     field_info = AdminRegistry.get_field_info(model_name)
+    editable_fields = AdminRegistry.get_editable_fields(model_name)
+    readonly_fields = AdminRegistry.get_readonly_fields(model_name)
     
     return templates.TemplateResponse("document_form.html", {
         "request": request,
@@ -231,6 +233,8 @@ async def collection_create_form(
         "model_name": model_name,
         "verbose_name": AdminRegistry.get_verbose_name(model_name),
         "field_info": field_info,
+        "editable_fields": editable_fields,
+        "readonly_fields": readonly_fields,
         "is_edit": False,
         "document": {},
         "collections": AdminRegistry.get_registered_models()
@@ -243,42 +247,49 @@ async def collection_create(
     model_name: str,
     admin_user: AdminUser = Depends(get_current_admin_user)
 ):
-    """Handle document creation."""
+    """Handle document creation - SAFE MODE: only processes editable fields."""
     model_class = AdminRegistry.get_model(model_name)
     if not model_class:
         raise HTTPException(status_code=404, detail="Collection not found")
     
     # Get form data
     form_data = await request.form()
+    form_dict = dict(form_data)
     
     try:
-        # Convert form data to document data
-        doc_data = AdminRegistry.process_form_data(model_name, dict(form_data))
+        # SAFE PROCESSING: Only process editable fields
+        safe_data = AdminRegistry.process_form_data(model_name, form_dict)
         
-        # Create document with validation
-        try:
-            document = model_class(**doc_data)
-            # This will trigger Pydantic validation
-            document.model_validate(document.dict())
-        except Exception as validation_error:
-            raise ValueError(f"Validation failed: {validation_error}")
+        if not safe_data:
+            raise ValueError("No valid editable fields provided")
         
+        # Create document with only safe data
+        print(f"[ADMIN CREATE] Creating {model_name} with safe fields: {list(safe_data.keys())}")
+        document = model_class.model_validate(safe_data)
         await document.save()
         
+        print(f"[ADMIN CREATE] Successfully created {model_name} document with ID: {document.id}")
         return RedirectResponse(
             url=f"/admin/collection/{model_name}",
             status_code=status.HTTP_302_FOUND
         )
+        
     except Exception as e:
+        print(f"[ADMIN CREATE] Error creating {model_name}: {str(e)}")
         field_info = AdminRegistry.get_field_info(model_name)
+        editable_fields = AdminRegistry.get_editable_fields(model_name)
+        readonly_fields = AdminRegistry.get_readonly_fields(model_name)
+        
         return templates.TemplateResponse("document_form.html", {
             "request": request,
             "admin_user": admin_user,
             "model_name": model_name,
             "verbose_name": AdminRegistry.get_verbose_name(model_name),
             "field_info": field_info,
+            "editable_fields": editable_fields,
+            "readonly_fields": readonly_fields,
             "is_edit": False,
-            "document": dict(form_data),
+            "document": form_dict,
             "error": str(e),
             "collections": AdminRegistry.get_registered_models()
         })
@@ -291,7 +302,7 @@ async def collection_edit_form(
     document_id: str,
     admin_user: AdminUser = Depends(get_current_admin_user)
 ):
-    """Show form to edit document."""
+    """Show form to edit document - separates editable from readonly fields."""
     model_class = AdminRegistry.get_model(model_name)
     if not model_class:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -302,6 +313,8 @@ async def collection_edit_form(
         raise HTTPException(status_code=404, detail="Document not found")
     
     field_info = AdminRegistry.get_field_info(model_name)
+    editable_fields = AdminRegistry.get_editable_fields(model_name)
+    readonly_fields = AdminRegistry.get_readonly_fields(model_name)
     doc_dict = serialize_document_for_template(document)
     
     return templates.TemplateResponse("document_form.html", {
@@ -310,6 +323,8 @@ async def collection_edit_form(
         "model_name": model_name,
         "verbose_name": AdminRegistry.get_verbose_name(model_name),
         "field_info": field_info,
+        "editable_fields": editable_fields,
+        "readonly_fields": readonly_fields,
         "is_edit": True,
         "document": doc_dict,
         "document_id": document_id,
@@ -324,7 +339,7 @@ async def collection_edit(
     document_id: str,
     admin_user: AdminUser = Depends(get_current_admin_user)
 ):
-    """Handle document editing."""
+    """Handle document editing - SAFE MODE: only processes editable fields."""
     model_class = AdminRegistry.get_model(model_name)
     if not model_class:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -336,45 +351,39 @@ async def collection_edit(
     
     # Get form data
     form_data = await request.form()
+    form_dict = dict(form_data)
     
     try:
-        # Convert form data to document data
-        doc_data = AdminRegistry.process_form_data(model_name, dict(form_data))
+        # SAFE PROCESSING: Only process editable fields
+        safe_data = AdminRegistry.process_form_data(model_name, form_dict)
         
-        # Create a backup of the original document data before modification
-        original_data = document.dict()
+        if not safe_data:
+            print(f"[ADMIN EDIT] No valid editable fields provided for {model_name}")
+            raise ValueError("No valid editable fields provided")
         
-        # Update document fields safely
-        updated_fields = []
-        for key, value in doc_data.items():
-            if hasattr(document, key):
-                try:
-                    setattr(document, key, value)
-                    updated_fields.append(key)
-                except Exception as field_error:
-                    print(f"Warning: Failed to set field '{key}': {field_error}")
-                    continue
+        print(f"[ADMIN EDIT] Updating {model_name} document {document_id} with safe fields: {list(safe_data.keys())}")
         
-        # Validate the document before saving
-        try:
-            # This will trigger Pydantic validation
-            document.model_validate(document.dict())
-        except Exception as validation_error:
-            # Restore original data if validation fails
-            for field in updated_fields:
-                if field in original_data:
-                    setattr(document, field, original_data[field])
-            raise ValueError(f"Validation failed: {validation_error}")
+        # Update only the safe fields on existing document
+        for field_name, value in safe_data.items():
+            if hasattr(document, field_name):
+                old_value = getattr(document, field_name, None)
+                setattr(document, field_name, value)
+                print(f"[ADMIN EDIT] Updated {field_name}: {old_value} -> {value}")
         
         # Save the document
         await document.save()
         
+        print(f"[ADMIN EDIT] Successfully updated {model_name} document {document_id}")
         return RedirectResponse(
             url=f"/admin/collection/{model_name}",
             status_code=status.HTTP_302_FOUND
         )
+        
     except Exception as e:
+        print(f"[ADMIN EDIT] Error updating {model_name} document {document_id}: {str(e)}")
         field_info = AdminRegistry.get_field_info(model_name)
+        editable_fields = AdminRegistry.get_editable_fields(model_name)
+        readonly_fields = AdminRegistry.get_readonly_fields(model_name)
         doc_dict = serialize_document_for_template(document)
         
         return templates.TemplateResponse("document_form.html", {
@@ -383,6 +392,8 @@ async def collection_edit(
             "model_name": model_name,
             "verbose_name": AdminRegistry.get_verbose_name(model_name),
             "field_info": field_info,
+            "editable_fields": editable_fields,
+            "readonly_fields": readonly_fields,
             "is_edit": True,
             "document": doc_dict,
             "document_id": document_id,

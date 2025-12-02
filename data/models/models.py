@@ -9,8 +9,9 @@ try:
 except Exception:  # pragma: no cover
     # Pydantic v1 fallback
     from pydantic import validator
-from beanie import Document, PydanticObjectId, Indexed
-from typing import Dict, List
+from beanie import Document, PydanticObjectId
+from beanie.odm.fields import Indexed as IndexedField
+from typing import Dict, List, Annotated
 
 
 # ===== USER MODEL =====
@@ -25,11 +26,11 @@ class InventoryItem(BaseModel):
 
 
 class User(Document):
-    username: Indexed(str, unique=True) = Field(..., min_length=3, max_length=30)
-    email: Indexed(EmailStr, unique=True) = Field(..., max_length=254)
+    username: Annotated[str, IndexedField(unique=True)] = Field(..., min_length=3, max_length=30)
+    email: Annotated[EmailStr, IndexedField(unique=True)] = Field(..., max_length=254)
     hashed_password: str
     hc_balance: int = 0
-    rank_points: Indexed(int) = 0  # Points that reflect user's activity and importance
+    rank_points: Annotated[int, IndexedField()] = 0  # Points that reflect user's activity and importance
     inventory: List[InventoryItem] = Field(default_factory=list)
     level: int = 1
     current_hustle: str = "Street Vendor" # Default starting hustle
@@ -81,8 +82,8 @@ class Quiz(Document):
 # ===== LAND TILE MODEL =====
 
 class LandTile(Document):
-    h3_index: Indexed(str, unique=True)
-    owner_id: Indexed(PydanticObjectId)
+    h3_index: Annotated[str, IndexedField(unique=True)]
+    owner_id: Annotated[PydanticObjectId, IndexedField()]
     purchased_at: datetime = Field(default_factory=datetime.utcnow)
     purchase_price: int
     last_income_payout_at: datetime = Field(default_factory=datetime.utcnow)
@@ -94,7 +95,7 @@ class LandTile(Document):
 # ===== PAYOUT MODEL =====
 
 class Payout(Document):
-    user_id: Indexed(PydanticObjectId)
+    user_id: Annotated[PydanticObjectId, IndexedField()]
     amount_hc: int  # Amount in HustleCoin
     amount_kwanza: float  # Amount in Kwanza (HC / conversion_rate)
     conversion_rate: float = 10.0  # Default: 1 Kwanza = 10 HC
@@ -112,7 +113,7 @@ class Payout(Document):
     bank_name: str | None = None
     
     # Status: "pending" | "completed" | "rejected"
-    status: Indexed(str) = "pending"
+    status: Annotated[str, IndexedField()] = "pending"
     
     # Admin notes and processing info
     admin_notes: str | None = None

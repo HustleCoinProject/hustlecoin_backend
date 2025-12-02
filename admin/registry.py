@@ -1,10 +1,11 @@
 # admin/registry.py
-from typing import Dict, Type, Any, List, Optional, get_origin, get_args, Union
+from typing import Dict, Type, Any, List, Optional, get_origin, get_args, Union, Annotated
 from datetime import datetime, date
-from beanie import Document
+from beanie import Document, Indexed
 from pydantic import BaseModel
 from bson import ObjectId
 import json
+import typing
 
 
 class FieldInfo:
@@ -21,7 +22,9 @@ class FieldInfo:
         widget: Optional[str] = None,
         is_readonly: bool = False,
         is_hidden: bool = False,
-        default_value: Any = None
+        default_value: Any = None,
+        is_safe_to_edit: bool = True,
+        is_system_field: bool = False
     ):
         self.field_name = field_name
         self.field_type = field_type
@@ -33,6 +36,8 @@ class FieldInfo:
         self.is_readonly = is_readonly
         self.is_hidden = is_hidden
         self.default_value = default_value
+        self.is_safe_to_edit = is_safe_to_edit
+        self.is_system_field = is_system_field
     
     def _get_default_widget(self) -> str:
         """Get default widget based on field type."""
@@ -145,12 +150,17 @@ class AdminRegistry:
             field_type = cls._extract_field_type(field_info_obj)
             is_required = cls._is_field_required_from_field_info(field_info_obj)
             
+            # Determine if this field is safe to edit
+            is_safe_to_edit = cls._is_field_safe_to_edit(field_name, field_type)
+            is_system_field = cls._is_system_field(field_name)
+            
             # Handle special fields - mark internal/system fields as readonly
             internal_fields = ['id', 'createdAt', 'revision_id', '_id', '__v', 'updated_at']
-            is_readonly = field_name in config.readonly_fields or field_name in internal_fields
+            is_readonly = field_name in config.readonly_fields or field_name in internal_fields or is_system_field or not is_safe_to_edit
+            
             default_value = cls._get_field_default(field_info_obj)
             
-            # Create FieldInfo with smart widget detection
+            # Create FieldInfo with smart widget detection and safety classification
             field_info[field_name] = FieldInfo(
                 field_name=field_name,
                 field_type=field_type,
@@ -158,7 +168,9 @@ class AdminRegistry:
                 is_readonly=is_readonly,
                 default_value=default_value,
                 widget=cls._determine_widget(field_type, field_name),
-                help_text=cls._generate_help_text(field_type, field_name)
+                help_text=cls._generate_help_text(field_type, field_name, is_safe_to_edit),
+                is_safe_to_edit=is_safe_to_edit,
+                is_system_field=is_system_field
             )
         
         return field_info
@@ -167,14 +179,56 @@ class AdminRegistry:
     def _extract_field_type(cls, field_info_obj) -> Type:
         """Extract the actual field type from Pydantic FieldInfo."""
         # Handle both Pydantic v1 and v2
+        extracted_type = None
         if hasattr(field_info_obj, 'annotation'):
-            return field_info_obj.annotation
+            extracted_type = field_info_obj.annotation
         elif hasattr(field_info_obj, 'type_'):
-            return field_info_obj.type_
+            extracted_type = field_info_obj.type_
         elif hasattr(field_info_obj, 'outer_type_'):
-            return field_info_obj.outer_type_
+            extracted_type = field_info_obj.outer_type_
         else:
             return str
+        
+        # Handle both old Indexed(type) and new Annotated[type, Indexed()] approaches
+        if extracted_type:
+            # Method 1: New Annotated[type, Indexed()] approach (recommended)
+            origin_type = typing.get_origin(extracted_type)
+            if origin_type is not None:
+                # Check if this is an Annotated type
+                if origin_type is Annotated or str(origin_type) == 'typing.Annotated':
+                    type_args = typing.get_args(extracted_type)
+                    if type_args:
+                        # First argument is the actual type (int, str, etc.)
+                        actual_type = type_args[0]
+                        print(f"Debug: Extracted {actual_type} from Annotated field")
+                        return actual_type
+            
+            # Method 2: Old Indexed(type) approach (legacy support)
+            if 'Indexed' in str(extracted_type):
+                try:
+                    if hasattr(extracted_type, '__bases__') and extracted_type.__bases__:
+                        # The first base class is the actual type (int, str, etc.)
+                        inner_type = extracted_type.__bases__[0]
+                        if inner_type != object:  # Skip generic object base
+                            print(f"Debug: Extracted {inner_type} from legacy Indexed field")
+                            return inner_type
+                    
+                    # Fallback: Try to extract from string representation
+                    type_str = str(extracted_type)
+                    if 'int' in type_str.lower():
+                        return int
+                    elif 'str' in type_str.lower():
+                        return str
+                    elif 'float' in type_str.lower():
+                        return float
+                    elif 'bool' in type_str.lower():
+                        return bool
+                except Exception as e:
+                    print(f"Warning: Failed to extract type from legacy Indexed field: {e}")
+                    # Fallback based on common patterns
+                    return str
+        
+        return extracted_type
     
     @classmethod
     def _is_field_required_from_field_info(cls, field_info_obj) -> bool:
@@ -215,6 +269,10 @@ class AdminRegistry:
             else:
                 return 'text'
         
+        # Handle EmailStr type specifically
+        elif 'EmailStr' in str(field_type) or 'email' in field_name.lower():
+            return 'email'
+        
         elif field_type in [int, float] or str(field_type) in ['int', 'float']:
             return 'number'
         
@@ -251,50 +309,184 @@ class AdminRegistry:
         return 'text'
     
     @classmethod
-    def _generate_help_text(cls, field_type: Type, field_name: str) -> str:
+    def _is_field_safe_to_edit(cls, field_name: str, field_type: Type) -> bool:
+        """Determine if a field is safe to edit in admin panel.
+        
+        PRACTICAL SAFETY: Allow editing of fields that won't cause data corruption.
+        Exclude only dangerous types that can break data integrity.
+        """
+        # System/internal fields are never safe to edit
+        if cls._is_system_field(field_name):
+            return False
+        
+        # Get origin type for generic types
+        origin_type = get_origin(field_type)
+        
+        # Safe primitive and simple types
+        safe_types = {
+            str, int, float, bool,
+            'str', 'int', 'float', 'bool', 
+            '<class \'str\'>', '<class \'int\'>', '<class \'float\'>', '<class \'bool\'>'
+        }
+        
+        # Check if it's a basic safe type
+        if field_type in safe_types or str(field_type) in safe_types:
+            return True
+        
+        # Handle EmailStr as safe (it's essentially a string)
+        if 'EmailStr' in str(field_type):
+            return True
+        
+        # DANGEROUS TYPES that cause corruption - exclude these
+        dangerous_patterns = [
+            'datetime', 'date',  # Time-based fields can break business logic
+            'PydanticObjectId', 'ObjectId',  # Database IDs should not be manually edited
+        ]
+        
+        type_str = str(field_type).lower()
+        for dangerous in dangerous_patterns:
+            if dangerous.lower() in type_str:
+                return False
+        
+        # Handle Optional[SafeType] - check the inner type
+        if origin_type is Union or 'Optional' in str(field_type):
+            type_args = get_args(field_type)
+            non_none_args = [arg for arg in type_args if arg != type(None)]
+            if len(non_none_args) == 1:
+                return cls._is_field_safe_to_edit(field_name, non_none_args[0])
+        
+        # Handle Annotated[SafeType, ...] - check the inner type
+        if origin_type is Annotated or str(origin_type) == 'typing.Annotated':
+            type_args = get_args(field_type)
+            if type_args:
+                return cls._is_field_safe_to_edit(field_name, type_args[0])
+        
+        # Handle List types - check if they contain simple types
+        if origin_type == list or 'List' in str(field_type):
+            type_args = get_args(field_type)
+            if type_args:
+                # Allow List[str], List[int], List[float], List[bool]
+                inner_type = type_args[0]
+                if inner_type in {str, int, float, bool} or str(inner_type) in {'str', 'int', 'float', 'bool'}:
+                    return True
+            # If no type args or unknown inner type, allow it (user responsibility)
+            return True
+        
+        # Handle Dict types - check if they contain simple types
+        if origin_type == dict or 'Dict' in str(field_type):
+            type_args = get_args(field_type)
+            if len(type_args) >= 2:
+                key_type, value_type = type_args[0], type_args[1]
+                # Allow Dict[str, simple_type] patterns
+                simple_types = {str, int, float, bool}
+                if (key_type in simple_types or str(key_type) in {'str', 'int', 'float', 'bool'}) and \
+                   (value_type in simple_types or str(value_type) in {'str', 'int', 'float', 'bool'} or 'datetime' not in str(value_type).lower()):
+                    return True
+            # If no type args, allow it (user responsibility)
+            return True
+        
+        # Allow most other types unless they're clearly dangerous
+        # This gives users flexibility while protecting against known corruption sources
+        return True
+    
+    @classmethod
+    def _is_system_field(cls, field_name: str) -> bool:
+        """Check if field is a system/internal field that should never be edited."""
+        system_fields = {
+            'id', '_id', 'createdAt', 'updated_at', 'revision_id', '__v',
+            'hashed_password', 'password_hash', 'salt',
+            'created_at', 'last_login', 'last_modified',
+            'session_token', 'access_token', 'refresh_token'
+        }
+        
+        # Check exact matches and patterns
+        if field_name in system_fields:
+            return True
+        
+        # Check patterns
+        if (field_name.endswith('_id') and field_name != 'user_id' and field_name != 'national_id') or \
+           field_name.startswith('_') or \
+           'password' in field_name.lower() or \
+           'token' in field_name.lower() or \
+           'hash' in field_name.lower():
+            return True
+        
+        return False
+    
+    @classmethod
+    def _generate_help_text(cls, field_type: Type, field_name: str, is_safe_to_edit: bool = True) -> str:
         """Generate helpful text for complex field types."""
+        # Add safety warning for unsafe fields
+        if not is_safe_to_edit:
+            safety_warning = "⚠️ READ-ONLY: Complex field type - editing disabled to prevent data corruption. "
+        else:
+            safety_warning = ""
+        
         origin_type = get_origin(field_type)
         
         if origin_type == list or 'List' in str(field_type):
             args = get_args(field_type)
             if args and hasattr(args[0], '__name__'):
-                return f"JSON array of {args[0].__name__} objects. Example: [{{'key': 'value'}}]"
-            return "JSON array. Example: [{'key': 'value'}]"
+                return f"{safety_warning}JSON array of {args[0].__name__} objects. Example: [{{'key': 'value'}}]"
+            return f"{safety_warning}JSON array. Example: [{'key': 'value'}]"
         
         elif origin_type == dict or 'Dict' in str(field_type):
             args = get_args(field_type)
             if len(args) >= 2:
                 key_type = args[0].__name__ if hasattr(args[0], '__name__') else str(args[0])
                 val_type = args[1].__name__ if hasattr(args[1], '__name__') else str(args[1])
-                return f"JSON object with {key_type} keys and {val_type} values. Example: {{'key': 'value'}}"
-            return "JSON object. Example: {'key': 'value'}"
+                return f"{safety_warning}JSON object with {key_type} keys and {val_type} values. Example: {{'key': 'value'}}"
+            return f"{safety_warning}JSON object. Example: {'key': 'value'}"
         
-        elif field_type in [datetime, date]:
-            return "Date and time in ISO format (YYYY-MM-DDTHH:MM:SS)"
+        elif field_type in [datetime, date] or 'datetime' in str(field_type).lower() or 'date' in str(field_type).lower():
+            return f"{safety_warning}Date and time fields are read-only to prevent business logic corruption"
         
         elif 'password' in field_name.lower():
-            return "Password will be hashed automatically"
+            return f"{safety_warning}Password will be hashed automatically"
         
-        return ""
+        elif cls._is_system_field(field_name):
+            return f"{safety_warning}System field - automatically managed."
+        
+        return safety_warning.rstrip()
     
 
     
     @classmethod
+    def get_editable_fields(cls, model_name: str) -> Dict[str, FieldInfo]:
+        """Get only the fields that are safe to edit in the admin panel."""
+        all_fields = cls.get_field_info(model_name)
+        return {
+            name: field_info for name, field_info in all_fields.items()
+            if field_info.is_safe_to_edit and not field_info.is_readonly and not field_info.is_system_field
+        }
+    
+    @classmethod
+    def get_readonly_fields(cls, model_name: str) -> Dict[str, FieldInfo]:
+        """Get fields that should be displayed as read-only."""
+        all_fields = cls.get_field_info(model_name)
+        return {
+            name: field_info for name, field_info in all_fields.items()
+            if not field_info.is_safe_to_edit or field_info.is_readonly or field_info.is_system_field
+        }
+    
+    @classmethod
     def process_form_data(cls, model_name: str, form_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Intelligently process form data using Pydantic model introspection."""
+        """Safely process form data - only editable fields are processed."""
         model = cls.get_model(model_name)
-        field_info = cls.get_field_info(model_name)
-        
         if not model:
             return {}
         
+        # CRITICAL: Only process fields that are safe to edit
+        editable_fields = cls.get_editable_fields(model_name)
         processed_data = {}
+        
+        print(f"[SAFE EDIT] Processing {model_name} - {len(editable_fields)} editable fields out of {len(cls.get_field_info(model_name))} total")
         
         # Get the model's Pydantic schema for validation
         model_fields = getattr(model, 'model_fields', {}) or getattr(model, '__fields__', {})
         
-        for field_name, field_info_obj in field_info.items():
-            if field_name in form_data and not field_info_obj.is_readonly:
+        for field_name, field_info_obj in editable_fields.items():
+            if field_name in form_data:
                 raw_value = form_data[field_name]
                 
                 # Skip empty values for optional fields
@@ -310,11 +502,17 @@ class AdminRegistry:
                     
                     if converted_value is not None:
                         processed_data[field_name] = converted_value
+                        print(f"[SAFE EDIT] Processed safe field: {field_name} = {converted_value}")
                         
                 except Exception as e:
-                    print(f"Warning: Failed to convert field '{field_name}' with value '{raw_value}': {e}")
+                    print(f"[SAFE EDIT] Warning: Failed to convert safe field '{field_name}' with value '{raw_value}': {e}")
                     # Skip problematic fields to prevent data corruption
                     continue
+        
+        # Log any fields that were ignored for security
+        ignored_fields = set(form_data.keys()) - set(editable_fields.keys())
+        if ignored_fields:
+            print(f"[SAFE EDIT] Ignored unsafe/readonly fields: {', '.join(ignored_fields)}")
         
         return processed_data
     
@@ -336,19 +534,27 @@ class AdminRegistry:
             if non_none_args:
                 return cls._smart_convert_value(field_name, value, non_none_args[0], pydantic_field)
         
-        # Basic type conversions
-        if field_type in [int, str] or str(field_type) in ['int', '<class \'int\'>']:
-            return int(value) if value else 0
+        # Basic type conversions - FIXED: Separate int and str checks
+        if field_type == int or str(field_type) in ['int', '<class \'int\'>']:
+            try:
+                return int(value) if value else 0
+            except (ValueError, TypeError):
+                print(f"Warning: Failed to convert '{value}' to int for field '{field_name}'")
+                return 0
         
-        elif field_type in [float] or str(field_type) in ['float', '<class \'float\'>']:
-            return float(value) if value else 0.0
+        elif field_type == float or str(field_type) in ['float', '<class \'float\'>']:
+            try:
+                return float(value) if value else 0.0
+            except (ValueError, TypeError):
+                print(f"Warning: Failed to convert '{value}' to float for field '{field_name}'")
+                return 0.0
         
-        elif field_type in [bool] or str(field_type) in ['bool', '<class \'bool\'>']:
+        elif field_type == bool or str(field_type) in ['bool', '<class \'bool\'>']:
             if isinstance(value, str):
                 return value.lower() in ['true', '1', 'on', 'yes']
             return bool(value)
         
-        elif field_type in [str] or str(field_type) in ['str', '<class \'str\'>']:
+        elif field_type == str or str(field_type) in ['str', '<class \'str\'>']:
             return str(value)
         
         elif field_type in [datetime] or 'datetime' in str(field_type):
@@ -442,11 +648,11 @@ class AdminRegistry:
 
 # Auto-register models from data.models
 def auto_register_models():
-    """Automatically register models from the data.models module."""
+    """Automatically register models with safe field configurations."""
     from data.models.models import User, Quiz, LandTile, Payout
     from admin.models import AdminUser
     
-    # Register User model
+    # Register User model with STRICT SAFETY CONTROLS
     AdminRegistry.register(
         User,
         AdminModelConfig(
@@ -455,7 +661,11 @@ def auto_register_models():
             verbose_name_plural="Users",
             list_display=["username", "email", "hc_balance", "level", "current_hustle"],
             search_fields=["username", "email"],
-            readonly_fields=["id", "createdAt", "hashed_password"],
+            # Force readonly for dangerous fields - automatic safety system will handle the rest
+            readonly_fields=[
+                "id", "createdAt", "hashed_password", "inventory", "task_cooldowns", 
+                "last_check_in_date", "last_tap_reset_date", "last_land_claim_at"
+            ],
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )
@@ -473,7 +683,7 @@ def auto_register_models():
         )
     )
     
-    # Register LandTile model
+    # Register LandTile model with SAFETY CONTROLS
     AdminRegistry.register(
         LandTile,
         AdminModelConfig(
@@ -481,12 +691,13 @@ def auto_register_models():
             verbose_name="Land Tile",
             verbose_name_plural="Land Tiles",
             list_display=["h3_index", "owner_id", "purchase_price", "purchased_at"],
-            readonly_fields=["id", "purchased_at", "last_income_payout_at"],
+            # System should only allow editing of purchase_price - other fields are system managed
+            readonly_fields=["id", "purchased_at", "last_income_payout_at", "owner_id", "h3_index"],
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )
     
-    # Register AdminUser model
+    # Register AdminUser model with MAXIMUM SECURITY
     AdminRegistry.register(
         AdminUser,
         AdminModelConfig(
@@ -494,12 +705,13 @@ def auto_register_models():
             verbose_name="Admin User",
             verbose_name_plural="Admin Users",
             list_display=["username", "email", "is_superuser", "is_active", "created_at"],
+            # Critical: Never allow editing of password hash or system timestamps
             readonly_fields=["id", "created_at", "last_login", "hashed_password"],
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )
     
-    # Register Payout model
+    # Register Payout model with STRICT FINANCIAL SAFETY
     AdminRegistry.register(
         Payout,
         AdminModelConfig(
@@ -510,7 +722,12 @@ def auto_register_models():
             list_filter=["status", "payout_method"],
             search_fields=["phone_number", "full_name", "bank_name"],
             ordering=["-created_at"],
-            readonly_fields=["id", "created_at", "user_id", "amount_hc", "amount_kwanza", "conversion_rate"],
+            # CRITICAL: Financial data should be readonly - only status and admin fields can be edited
+            readonly_fields=[
+                "id", "created_at", "updated_at", "user_id", "amount_hc", 
+                "amount_kwanza", "conversion_rate", "payout_method",
+                "phone_number", "full_name", "national_id", "bank_iban", "bank_name"
+            ],
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )
