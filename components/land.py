@@ -223,10 +223,10 @@ async def claim_land_income(current_user: User = Depends(get_current_user)):
     if not user_tiles:
         raise HTTPException(status_code=404, detail="You don't own any land tiles.")
     
-    total_income = 0
+    # Batch calculate income for all tiles (optimized)
+    total_time_seconds = 0
     tiles_processed = 0
     
-    # Calculate income for each tile
     for tile in user_tiles:
         # Calculate time since last claim or tile purchase (whichever is more recent)
         last_reference_time = tile.last_income_payout_at
@@ -236,36 +236,37 @@ async def claim_land_income(current_user: User = Depends(get_current_user)):
         time_diff_seconds = (now - last_reference_time).total_seconds()
         
         if time_diff_seconds > 0:
-            # Calculate income based on accumulation setting
+            # Accumulate time for batch calculation
             if settings.LAND_INCOME_ACCUMULATE:
-                # Accumulate income over the actual time passed
-                tile_income = await GameLogic.calculate_land_income(
-                    user=current_user,
-                    time_diff_seconds=time_diff_seconds
-                )
+                total_time_seconds += time_diff_seconds
             else:
-                # Fixed daily amount regardless of days passed (max 24 hours worth)
-                # Cap the time at 24 hours (86400 seconds) for non-accumulating mode
-                capped_time_seconds = min(time_diff_seconds, 24 * 3600)
-                tile_income = await GameLogic.calculate_land_income(
-                    user=current_user,
-                    time_diff_seconds=capped_time_seconds
-                )
-                
-                # FIRST CLAIM BONUS: If this is the user's first ever land claim,
-                # ensure they get at least the full daily amount (50 HC per tile)
-                if current_user.last_land_claim_at is None:
-                    min_daily_income = await GameLogic.calculate_land_income(
-                        user=current_user,
-                        time_diff_seconds=24 * 3600  # Full day's worth
-                    )
-                    tile_income = max(tile_income, min_daily_income)
+                # Cap at 24 hours per tile for non-accumulating mode
+                total_time_seconds += min(time_diff_seconds, 24 * 3600)
             
-            total_income += tile_income
             tiles_processed += 1
-            
-            # Update tile's last payout time
-            await tile.update(Set({LandTile.last_income_payout_at: now}))
+    
+    # Single batch calculation for all tiles
+    total_income = 0
+    if total_time_seconds > 0:
+        total_income = await GameLogic.calculate_land_income(
+            user=current_user,
+            time_diff_seconds=total_time_seconds
+        )
+        
+        # FIRST CLAIM BONUS: If this is the user's first ever land claim,
+        # ensure at least full daily amount per tile
+        if current_user.last_land_claim_at is None:
+            min_daily_income = await GameLogic.calculate_land_income(
+                user=current_user,
+                time_diff_seconds=24 * 3600 * tiles_processed
+            )
+            total_income = max(total_income, min_daily_income)
+    
+    # Bulk update all tiles' last payout time in a single database operation
+    tile_ids = [tile.id for tile in user_tiles]
+    await LandTile.find(In(LandTile.id, tile_ids)).update(
+        Set({LandTile.last_income_payout_at: now})
+    )
     
     if total_income <= 0:
         raise HTTPException(status_code=400, detail="No income available to claim.")
@@ -331,44 +332,44 @@ async def get_land_income_status(current_user: User = Depends(get_current_user))
             next_claim_available_at = current_user.last_land_claim_at + timedelta(hours=24)
             time_until_next_claim_seconds = int((next_claim_available_at - now).total_seconds())
     
-    # Calculate available income
+    # Batch calculate available income for all tiles at once (optimized)
     total_available_income = 0
     
-    for tile in user_tiles:
-        # Calculate time since last claim or tile purchase (whichever is more recent)
-        last_reference_time = tile.last_income_payout_at
-        if current_user.last_land_claim_at and current_user.last_land_claim_at > last_reference_time:
-            last_reference_time = current_user.last_land_claim_at
+    if tiles_count > 0:
+        # Calculate total time-weighted income in one pass
+        total_time_seconds = 0
         
-        time_diff_seconds = (now - last_reference_time).total_seconds()
-        
-        if time_diff_seconds > 0:
-            # Calculate available income based on accumulation setting
-            if settings.LAND_INCOME_ACCUMULATE:
-                # Show accumulated income over the actual time passed
-                tile_income = await GameLogic.calculate_land_income(
-                    user=current_user,
-                    time_diff_seconds=time_diff_seconds
-                )
-            else:
-                # Show fixed daily amount regardless of days passed (max 24 hours worth)
-                # Cap the time at 24 hours (86400 seconds) for non-accumulating mode
-                capped_time_seconds = min(time_diff_seconds, 24 * 3600)
-                tile_income = await GameLogic.calculate_land_income(
-                    user=current_user,
-                    time_diff_seconds=capped_time_seconds
-                )
-                
-                # FIRST CLAIM BONUS: If this is the user's first ever land claim,
-                # show at least the full daily amount (50 HC per tile)
-                if current_user.last_land_claim_at is None:
-                    min_daily_income = await GameLogic.calculate_land_income(
-                        user=current_user,
-                        time_diff_seconds=24 * 3600  # Full day's worth
-                    )
-                    tile_income = max(tile_income, min_daily_income)
+        for tile in user_tiles:
+            # Calculate time since last claim or tile purchase (whichever is more recent)
+            last_reference_time = tile.last_income_payout_at
+            if current_user.last_land_claim_at and current_user.last_land_claim_at > last_reference_time:
+                last_reference_time = current_user.last_land_claim_at
             
-            total_available_income += tile_income
+            time_diff_seconds = (now - last_reference_time).total_seconds()
+            
+            if time_diff_seconds > 0:
+                # Accumulate time for batch calculation
+                if settings.LAND_INCOME_ACCUMULATE:
+                    total_time_seconds += time_diff_seconds
+                else:
+                    # Cap at 24 hours per tile for non-accumulating mode
+                    total_time_seconds += min(time_diff_seconds, 24 * 3600)
+        
+        # Single batch calculation for all tiles
+        if total_time_seconds > 0:
+            total_available_income = await GameLogic.calculate_land_income(
+                user=current_user,
+                time_diff_seconds=total_time_seconds
+            )
+            
+            # FIRST CLAIM BONUS: If this is the user's first ever land claim,
+            # ensure at least full daily amount per tile
+            if current_user.last_land_claim_at is None:
+                min_daily_income = await GameLogic.calculate_land_income(
+                    user=current_user,
+                    time_diff_seconds=24 * 3600 * tiles_count  # Full day per tile
+                )
+                total_available_income = max(total_available_income, min_daily_income)
     
     return LandIncomeStatus(
         can_claim=can_claim,

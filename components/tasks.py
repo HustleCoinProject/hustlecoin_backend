@@ -6,12 +6,17 @@ from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
 from beanie import PydanticObjectId
 from beanie.operators import Inc, Set
+import random
 
 from data.models import User, Quiz
 from core.security import get_current_user
 from core.game_logic import GameLogic
+from core.cache import SimpleCache
 
 router = APIRouter(prefix="/api/tasks", tags=["Tasks & Quizzes"])
+
+# Cache for quiz list (30 minutes)
+quiz_cache = SimpleCache[List[Quiz]](ttl_seconds=1800)
 
 # --- Task Configuration ---
 # This dictionary defines all available tasks, their rewards, cooldowns in seconds, and rank points.
@@ -230,40 +235,31 @@ async def complete_task(
     )
 
 
+async def _fetch_all_active_quizzes() -> List[Quiz]:
+    """Fetch all active quizzes from database."""
+    return await Quiz.find(Quiz.isActive == True).to_list()
+
+
 # DOCS: Uses PyMongo here directly due to a bug that Motor/Beanie
 #      has version mis-match with PyMongo. Bug is in Beanie or Motor.
 @router.get("/quiz/fetch", response_model=QuizQuestionResponse)
 async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
-    """Fetches a random quiz question for the quiz_game task."""
+    """Fetches a random quiz question for the quiz_game task (cached for 30 minutes)."""
     user_lang = current_user.language
 
-    # --- FIX START ---
-
-    # 1. Get the underlying pymongo collection from the Beanie model
-    #    using the correct method name from your traceback.
-    collection = Quiz.get_pymongo_collection()
-
-    # 2. Define the aggregation pipeline
-    pipeline = [{"$match": {"isActive": True}}, {"$sample": {"size": 1}}]
-
-    # 3. Create the cursor. Note there is NO `await` here. This returns
-    #    the AsyncIOMotorLatentCommandCursor object.
-    cursor = collection.aggregate(pipeline)
-
-    # 4. Await the .to_list() method on the cursor to fetch the data.
-    #    This is the part that is actually awaitable.
-    random_quiz_list = await cursor.to_list(length=1)
-
-    if not random_quiz_list:
+    # Get cached list of all active quizzes (or fetch if expired)
+    all_quizzes = await quiz_cache.get_or_fetch(_fetch_all_active_quizzes)
+    
+    if not all_quizzes:
         raise HTTPException(status_code=404, detail="No active quizzes found.")
-
-    # The result is a list, so we get the first element
-    quiz_doc = random_quiz_list[0]
+    
+    # Select random quiz from cached list (in-memory operation, very fast)
+    quiz = random.choice(all_quizzes)
 
     return QuizQuestionResponse(
-        quizId=quiz_doc["_id"],
-        question=quiz_doc.get(f"question_{user_lang}", quiz_doc["question_en"]),
-        options=quiz_doc.get(f"options_{user_lang}", quiz_doc["options_en"])
+        quizId=quiz.id,
+        question=getattr(quiz, f"question_{user_lang}", quiz.question_en),
+        options=getattr(quiz, f"options_{user_lang}", quiz.options_en)
     )
 
 

@@ -8,6 +8,7 @@ except Exception:  # pragma: no cover
     # Pydantic v1 fallback
     from pydantic import validator
 from beanie import PydanticObjectId
+from beanie.operators import Set
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Dict, List
@@ -264,14 +265,17 @@ async def get_user_inventory(current_user: User = Depends(get_current_user)):
     """
     Views the current user's active inventory items for frontend display.
     Only returns non-expired items with essential display information.
+    Automatically cleans up expired items from database.
     """
     now = datetime.utcnow()
     user_language = current_user.language
     active_inventory = []
+    expired_items = []
     
     for item in current_user.inventory:
-        # Skip expired items completely
+        # Track expired items for cleanup
         if item.expires_at and item.expires_at <= now:
+            expired_items.append(item)
             continue
             
         # Get item configuration from shop
@@ -302,6 +306,15 @@ async def get_user_inventory(current_user: User = Depends(get_current_user)):
         )
         
         active_inventory.append(inventory_item)
+    
+    # Clean up expired items from user's inventory in database (if any exist)
+    if expired_items:
+        # Filter out expired items and update user document
+        cleaned_inventory = [
+            item for item in current_user.inventory 
+            if not (item.expires_at and item.expires_at <= now)
+        ]
+        await current_user.update(Set({User.inventory: cleaned_inventory}))
     
     # Sort by purchase date (newest first)
     active_inventory.sort(key=lambda x: -x.purchased_at.timestamp())

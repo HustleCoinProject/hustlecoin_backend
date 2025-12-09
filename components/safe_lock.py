@@ -1,6 +1,6 @@
 # components/safe_lock.py
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
@@ -11,8 +11,20 @@ from data.models import User
 from core.security import get_current_user
 from core.translations import translate_text
 from components.shop import SHOP_ITEMS_CONFIG
+from core.cache import SimpleCache
 
 router = APIRouter(prefix="/api/safe-lock", tags=["Safe Lock"])
+
+# Cache for aggregated global stats (5 minutes) - stores only totals, not user documents
+# This is memory-efficient and scales to millions of users
+class SafeLockAggregateStats(BaseModel):
+    """Cached aggregate statistics for safe lock calculations."""
+    total_rank_points: int
+    total_safe_lock_amount: int
+    total_users_with_safe_lock: int
+    average_safe_lock_amount: float
+
+safe_lock_global_cache = SimpleCache[SafeLockAggregateStats](ttl_seconds=300)
 
 # --- DTOs (Data Transfer Objects) ---
 
@@ -63,25 +75,80 @@ class SafeLockGlobalStatsOut(BaseModel):
 
 # --- Helper Functions ---
 
+async def _fetch_aggregate_stats() -> SafeLockAggregateStats:
+    """
+    Fetch aggregated statistics using MongoDB aggregation pipeline.
+    This is memory-efficient as it only returns totals, not full user documents.
+    Scales to millions of users.
+    """
+    collection = User.get_pymongo_collection()
+    
+    # Aggregation pipeline to calculate all needed statistics in one query
+    pipeline = [
+        {
+            "$group": {
+                "_id": None,
+                "total_rank_points": {"$sum": "$rank_points"},
+                "total_safe_lock_amount": {"$sum": "$safe_lock_amount"},
+                "total_users_with_safe_lock": {
+                    "$sum": {"$cond": [{"$gt": ["$safe_lock_amount", 0]}, 1, 0]}
+                },
+                "sum_safe_lock_for_avg": {
+                    "$sum": {"$cond": [{"$gt": ["$safe_lock_amount", 0]}, "$safe_lock_amount", 0]}
+                }
+            }
+        }
+    ]
+    
+    cursor = collection.aggregate(pipeline)
+    results = await cursor.to_list(length=1)
+    
+    if not results:
+        # No users in database
+        return SafeLockAggregateStats(
+            total_rank_points=0,
+            total_safe_lock_amount=0,
+            total_users_with_safe_lock=0,
+            average_safe_lock_amount=0.0
+        )
+    
+    data = results[0]
+    total_users_with_safe_lock = data.get("total_users_with_safe_lock", 0)
+    
+    # Calculate average (only among users with safe lock > 0)
+    if total_users_with_safe_lock > 0:
+        average = data.get("sum_safe_lock_for_avg", 0) / total_users_with_safe_lock
+    else:
+        average = 0.0
+    
+    return SafeLockAggregateStats(
+        total_rank_points=data.get("total_rank_points", 0),
+        total_safe_lock_amount=data.get("total_safe_lock_amount", 0),
+        total_users_with_safe_lock=total_users_with_safe_lock,
+        average_safe_lock_amount=round(average, 2)
+    )
+
+
 async def get_total_safe_lock_amount() -> int:
-    """Calculate total HC locked in safe across all users."""
-    all_users = await User.find_all().to_list()
-    total_safe_lock = sum(u.safe_lock_amount for u in all_users)
-    return total_safe_lock
+    """Calculate total HC locked in safe across all users (uses cached aggregated data)."""
+    stats = await safe_lock_global_cache.get_or_fetch(_fetch_aggregate_stats)
+    return stats.total_safe_lock_amount
+
 
 async def calculate_safe_lock_reward(user: User) -> SafeLockReward:
     """
     Calculate reward based on user's rank points and safe lock amount relative to all other users.
     Ensures minimum 30 HC reward if calculation yields less.
+    Uses cached aggregated statistics for memory-efficient performance.
     
     Returns a SafeLockReward with either HC or an item from shop.
     """
-    # Get all users for relative calculations
-    all_users = await User.find_all().to_list()
+    # Get aggregated statistics (cached, memory-efficient)
+    stats = await safe_lock_global_cache.get_or_fetch(_fetch_aggregate_stats)
     
-    # Calculate totals
-    total_rank_points = sum(u.rank_points for u in all_users)
-    total_safe_lock = await get_total_safe_lock_amount()
+    # Use aggregated totals
+    total_rank_points = stats.total_rank_points
+    total_safe_lock = stats.total_safe_lock_amount
     
     # Avoid division by zero
     if total_rank_points == 0:
@@ -147,27 +214,17 @@ async def calculate_safe_lock_reward(user: User) -> SafeLockReward:
 @api_limiter.limit("60/minute")
 async def get_global_safe_lock_stats(request: Request):
     """
-    Public endpoint to get global safe lock statistics.
-    Shows total HC locked across all users and related metrics.
+    Public endpoint to get global safe lock statistics (cached for 5 minutes).
+    Uses MongoDB aggregation for memory-efficient statistics calculation.
     No authentication required.
     """
-    all_users = await User.find_all().to_list()
-    
-    # Calculate statistics
-    total_safe_lock = sum(u.safe_lock_amount for u in all_users)
-    users_with_safe_lock = [u for u in all_users if u.safe_lock_amount > 0]
-    total_users_with_safe_lock = len(users_with_safe_lock)
-    
-    # Calculate average (only among users who have safe lock active)
-    if total_users_with_safe_lock > 0:
-        average_safe_lock = sum(u.safe_lock_amount for u in users_with_safe_lock) / total_users_with_safe_lock
-    else:
-        average_safe_lock = 0.0
+    # Get aggregated statistics (cached, memory-efficient)
+    stats = await safe_lock_global_cache.get_or_fetch(_fetch_aggregate_stats)
     
     return SafeLockGlobalStatsOut(
-        total_safe_lock_global=total_safe_lock,
-        total_users_with_safe_lock=total_users_with_safe_lock,
-        average_safe_lock_amount=round(average_safe_lock, 2)
+        total_safe_lock_global=stats.total_safe_lock_amount,
+        total_users_with_safe_lock=stats.total_users_with_safe_lock,
+        average_safe_lock_amount=stats.average_safe_lock_amount
     )
 
 @router.get("/status", response_model=SafeLockStatusOut)

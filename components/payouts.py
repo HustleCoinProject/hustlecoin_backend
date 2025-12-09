@@ -294,15 +294,14 @@ async def request_payout(
 
 @router.get("/history", response_model=List[PayoutOut])
 async def get_payout_history(
-    limit: int = 50,
-    offset: int = 0,
     current_user: User = Depends(get_current_user)
 ):
-    """Get user's payout history."""
+    """Get user's payout history (latest 10 records only)."""
     
+    # Fixed limit of 10 to prevent memory issues
     payouts = await Payout.find(
         {"user_id": current_user.id}
-    ).sort("-created_at").limit(limit).skip(offset).to_list()
+    ).sort("-created_at").limit(10).to_list()
     
     return [
         PayoutOut(
@@ -359,19 +358,46 @@ async def get_payout_details(
 # Helper endpoint for system status (can be useful for monitoring)
 @router.get("/system/status", response_model=dict)
 async def get_payout_system_status():
-    """Get payout system status - useful for monitoring."""
+    """Get payout system status - useful for monitoring (optimized with aggregation)."""
     
-    # Count payouts by status
-    pending_count = await Payout.find({"status": "pending"}).count()
-    completed_count = await Payout.find({"status": "completed"}).count()
-    rejected_count = await Payout.find({"status": "rejected"}).count()
+    # Use single aggregation pipeline for all statistics (memory-efficient)
+    collection = Payout.get_pymongo_collection()
     
-    # Calculate total amounts
-    completed_payouts = await Payout.find({"status": "completed"}).to_list()
-    total_completed_kwanza = sum(p.amount_kwanza for p in completed_payouts)
+    pipeline = [
+        {
+            "$group": {
+                "_id": "$status",
+                "count": {"$sum": 1},
+                "total_kwanza": {"$sum": "$amount_kwanza"}
+            }
+        }
+    ]
     
-    pending_payouts = await Payout.find({"status": "pending"}).to_list()
-    pending_total_kwanza = sum(p.amount_kwanza for p in pending_payouts)
+    cursor = collection.aggregate(pipeline)
+    results = await cursor.to_list(length=10)
+    
+    # Parse aggregation results
+    stats = {
+        "pending": 0,
+        "completed": 0,
+        "rejected": 0,
+        "total_completed_kwanza": 0.0,
+        "pending_total_kwanza": 0.0
+    }
+    
+    for result in results:
+        status = result.get("_id")
+        count = result.get("count", 0)
+        total_kwanza = result.get("total_kwanza", 0.0)
+        
+        if status == "pending":
+            stats["pending"] = count
+            stats["pending_total_kwanza"] = total_kwanza
+        elif status == "completed":
+            stats["completed"] = count
+            stats["total_completed_kwanza"] = total_kwanza
+        elif status == "rejected":
+            stats["rejected"] = count
     
     return {
         "system_name": "HustleCoin Payout System",
@@ -379,11 +405,5 @@ async def get_payout_system_status():
         "conversion_rate": settings.PAYOUT_CONVERSION_RATE,
         "minimum_payout_hc": settings.MINIMUM_PAYOUT_HC,
         "minimum_payout_kwanza": settings.MINIMUM_PAYOUT_KWANZA,
-        "statistics": {
-            "pending": pending_count,
-            "completed": completed_count,
-            "rejected": rejected_count,
-            "total_completed_kwanza": total_completed_kwanza,
-            "pending_total_kwanza": pending_total_kwanza
-        }
+        "statistics": stats
     }
