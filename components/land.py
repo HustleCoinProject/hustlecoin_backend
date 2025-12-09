@@ -124,6 +124,20 @@ async def buy_land_tile(
         base_rank_points=5
     )
     
+    # Check if tile is already owned
+    existing_tile = await LandTile.find_one(LandTile.h3_index == h3_index)
+    if existing_tile:
+        raise HTTPException(status_code=409, detail="This land tile is already owned.")
+    
+    # Deduct balance and update rank points
+    await current_user.update(
+        Inc({
+            User.hc_balance: -settings.LAND_PRICE,
+            User.rank_points: land_purchase_rank_points
+        })
+    )
+    
+    # Create and save the new tile
     now = datetime.utcnow()
     new_tile = LandTile(
         h3_index=h3_index,
@@ -132,45 +146,21 @@ async def buy_land_tile(
         purchased_at=now,
         last_income_payout_at=now
     )
-
-    # Use MongoDB transaction to prevent race conditions
-    from motor.motor_asyncio import AsyncIOMotorClient
-    from beanie import get_beanie_client
     
-    client = get_beanie_client()
-    async with await client.start_session() as session:
-        async with session.start_transaction():
-            try:
-                # Check if tile is already owned within transaction
-                existing_tile = await LandTile.find_one(
-                    LandTile.h3_index == h3_index,
-                    session=session
-                )
-                if existing_tile:
-                    raise HTTPException(status_code=409, detail="This land tile is already owned.")
-                
-                # Check user balance within transaction
-                current_user_in_tx = await User.get(current_user.id, session=session)
-                if current_user_in_tx.hc_balance < settings.LAND_PRICE:
-                    raise HTTPException(status_code=402, detail="Insufficient HustleCoin to buy land.")
-                
-                # Atomic operations within transaction
-                await current_user_in_tx.update(
-                    Inc({
-                        User.hc_balance: -settings.LAND_PRICE,
-                        User.rank_points: land_purchase_rank_points
-                    }),
-                    session=session
-                )
-                
-                await new_tile.insert(session=session)
-                
-            except HTTPException:
-                # Let HTTP exceptions bubble up (these are business logic errors)
-                raise
-            except Exception as e:
-                # Handle any other errors
-                raise HTTPException(status_code=500, detail="Failed to purchase tile. Please try again.")
+    try:
+        await new_tile.insert()
+    except Exception as e:
+        # If insert fails (e.g., duplicate key), refund the user
+        await current_user.update(
+            Inc({
+                User.hc_balance: settings.LAND_PRICE,
+                User.rank_points: -land_purchase_rank_points
+            })
+        )
+        # Check if it's a duplicate key error
+        if "duplicate" in str(e).lower() or "E11000" in str(e):
+            raise HTTPException(status_code=409, detail="This land tile is already owned.")
+        raise HTTPException(status_code=500, detail="Failed to purchase tile. Please try again.")
 
     return {
         "message": f"Land purchased successfully! Earned {land_purchase_rank_points} rank points.", 

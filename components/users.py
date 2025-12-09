@@ -55,6 +55,8 @@ class UserOut(BaseModel):
     daily_tap_earnings: int = 0
     last_tap_reset_date: date | None = None
     last_land_claim_at: datetime | None = None
+    safe_lock_amount: int = 0
+    safe_lock_locked_until: datetime | None = None
     createdAt: datetime
 
 class UserRegister(BaseModel):

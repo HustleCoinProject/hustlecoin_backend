@@ -50,6 +50,10 @@ class User(Document):
     # For land income claiming system
     last_land_claim_at: datetime | None = None  # Last time user claimed land income
     
+    # For safe lock system
+    safe_lock_amount: int = 0  # HC amount currently locked in safe
+    safe_lock_locked_until: datetime | None = None  # When the safe lock can be claimed
+    
     # Payout information fields
     phone_number: str | None = None  # For Angola Multicaixa Express transfers
     full_name: str | None = None  # Full name for transfers
