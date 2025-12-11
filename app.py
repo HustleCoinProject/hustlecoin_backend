@@ -114,7 +114,7 @@ async def get_system_info():
     return {
         "payout_conversion_rate": settings.PAYOUT_CONVERSION_RATE,
         "minimum_payout_hc": settings.MINIMUM_PAYOUT_HC,
-        "minimum_payout_kwanza": settings.MINIMUM_PAYOUT_KWANZA,
+        "minimum_payout_kwanza": round(settings.MINIMUM_PAYOUT_HC / settings.PAYOUT_CONVERSION_RATE, 2),
         "land_price": settings.LAND_PRICE,
         "land_income_per_day": settings.LAND_INCOME_PER_DAY
     }

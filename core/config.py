@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     
     # Payout configuration
     PAYOUT_CONVERSION_RATE: float = 10.0  # 1 Kwanza = 10 HC
-    MINIMUM_PAYOUT_HC: int = 100  # Minimum HC required for payout
-    MINIMUM_PAYOUT_KWANZA: float = 10.0  # Minimum Kwanza for payout
+    MINIMUM_PAYOUT_HC: int = 10000  # Minimum HC required for payout (10,000 HC = 1,000 Kwanza)
+    MAXIMUM_PAYOUT_HC: int = 30000  # Maximum HC allowed per payout (30,000 HC = 3,000 Kwanza)
     
     # Redis configuration for rate limiting
     REDIS_URL: str = "redis://localhost:6379/0"

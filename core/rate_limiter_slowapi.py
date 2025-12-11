@@ -62,16 +62,20 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     from fastapi.responses import JSONResponse
     from datetime import datetime
     
+    # Get description from exc.detail or provide a default message
+    description = getattr(exc, 'detail', None) or getattr(exc, 'description', 'Too many requests')
+    retry_after = getattr(exc, 'retry_after', 60)
+    
     return JSONResponse(
         status_code=429,
         content={
             "error": True,
-            "message": f"Rate limit exceeded: {exc.description}",
+            "message": f"Rate limit exceeded: {description}",
             "status_code": 429,
             "timestamp": datetime.utcnow().isoformat(),
-            "retry_after": exc.retry_after
+            "retry_after": retry_after
         },
-        headers={"Retry-After": str(exc.retry_after) if exc.retry_after else "60"}
+        headers={"Retry-After": str(retry_after)}
     )
 
 def setup_rate_limiting(app):

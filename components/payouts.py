@@ -1,5 +1,6 @@
 # components/payouts.py
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field, validator
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -90,6 +91,8 @@ class PayoutRequest(BaseModel):
     def validate_amount(cls, v):
         if v < settings.MINIMUM_PAYOUT_HC:
             raise ValueError(f'Minimum payout amount is {settings.MINIMUM_PAYOUT_HC} HC')
+        if v > settings.MAXIMUM_PAYOUT_HC:
+            raise ValueError(f'Maximum payout amount is {settings.MAXIMUM_PAYOUT_HC} HC')
         return v
 
     def validate_payout_fields(self):
@@ -120,6 +123,20 @@ class UserPayoutInfo(BaseModel):
 
 # --- Helper Functions ---
 
+def is_sunday_angola_time() -> bool:
+    """Check if current time is Sunday in Angola timezone (WAT - West Africa Time, UTC+1)."""
+    try:
+        angola_tz = ZoneInfo("Africa/Luanda")
+        angola_now = datetime.now(angola_tz)
+        return angola_now.weekday() == 6  # 6 = Sunday (0 = Monday)
+    except Exception:
+        # Fallback to UTC+1 if ZoneInfo fails
+        from datetime import timezone, timedelta
+        utc_plus_1 = timezone(timedelta(hours=1))
+        angola_now = datetime.now(utc_plus_1)
+        return angola_now.weekday() == 6
+
+
 def calculate_kwanza_amount(hc_amount: int) -> float:
     """Convert HC to Kwanza based on current rate."""
     return round(hc_amount / settings.PAYOUT_CONVERSION_RATE, 2)
@@ -127,20 +144,21 @@ def calculate_kwanza_amount(hc_amount: int) -> float:
 
 def get_payout_methods() -> List[PayoutMethodInfo]:
     """Get available payout methods with their requirements."""
+    min_kwanza = calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC)
     return [
         PayoutMethodInfo(
             method="multicaixa_express",
             name="Multicaixa Express",
             description="Transfer to your Multicaixa account using phone number",
             required_fields=["phone_number", "full_name", "national_id"],
-            min_amount_kwanza=settings.MINIMUM_PAYOUT_KWANZA
+            min_amount_kwanza=min_kwanza
         ),
         PayoutMethodInfo(
             method="bank_transfer",
             name="Bank Transfer",
             description="Transfer to your bank account using IBAN",
             required_fields=["bank_iban", "bank_name"],
-            min_amount_kwanza=settings.MINIMUM_PAYOUT_KWANZA
+            min_amount_kwanza=min_kwanza
         )
     ]
 
@@ -165,7 +183,7 @@ async def get_user_payout_info(current_user: User = Depends(get_current_user)):
         available_balance_hc=current_user.hc_balance,
         available_balance_kwanza=calculate_kwanza_amount(current_user.hc_balance),
         min_payout_hc=settings.MINIMUM_PAYOUT_HC,
-        min_payout_kwanza=settings.MINIMUM_PAYOUT_KWANZA,
+        min_payout_kwanza=calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC),
         conversion_rate=settings.PAYOUT_CONVERSION_RATE
     )
 
@@ -210,7 +228,7 @@ async def update_payout_info(
         available_balance_hc=current_user.hc_balance,
         available_balance_kwanza=calculate_kwanza_amount(current_user.hc_balance),
         min_payout_hc=settings.MINIMUM_PAYOUT_HC,
-        min_payout_kwanza=settings.MINIMUM_PAYOUT_KWANZA,
+        min_payout_kwanza=calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC),
         conversion_rate=settings.PAYOUT_CONVERSION_RATE
     )
 
@@ -221,6 +239,13 @@ async def request_payout(
     current_user: User = Depends(get_current_user)
 ):
     """Request a new payout."""
+    
+    # Check if it's Sunday in Angola time
+    if not is_sunday_angola_time():
+        raise HTTPException(
+            status_code=400,
+            detail="Payout requests can only be made on Sundays (Angola time)."
+        )
     
     # Validate payout fields based on method
     try:
@@ -237,9 +262,18 @@ async def request_payout(
     
     # Check minimum payout amount
     if payout_request.amount_hc < settings.MINIMUM_PAYOUT_HC:
+        min_kwanza = calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC)
         raise HTTPException(
             status_code=400,
-            detail=f"Minimum payout amount is {settings.MINIMUM_PAYOUT_HC} HC ({settings.MINIMUM_PAYOUT_KWANZA} Kwanza)"
+            detail=f"Minimum payout amount is {settings.MINIMUM_PAYOUT_HC} HC ({min_kwanza} Kwanza)"
+        )
+    
+    # Check maximum payout amount
+    if payout_request.amount_hc > settings.MAXIMUM_PAYOUT_HC:
+        max_kwanza = calculate_kwanza_amount(settings.MAXIMUM_PAYOUT_HC)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum payout amount is {settings.MAXIMUM_PAYOUT_HC} HC ({max_kwanza} Kwanza)"
         )
     
     # Check for pending payouts (limit one pending payout per user)
@@ -404,6 +438,6 @@ async def get_payout_system_status():
         "status": "operational",
         "conversion_rate": settings.PAYOUT_CONVERSION_RATE,
         "minimum_payout_hc": settings.MINIMUM_PAYOUT_HC,
-        "minimum_payout_kwanza": settings.MINIMUM_PAYOUT_KWANZA,
+        "minimum_payout_kwanza": calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC),
         "statistics": stats
     }
