@@ -25,18 +25,20 @@ class FirebaseService:
             return
             
         try:
-            # Option 1: Check for JSON credentials in environment variable (recommended for production)
-            service_account_json = settings.FIREBASE_SERVICE_ACCOUNT_JSON
+            # Option 1: Check for base64-encoded credentials (recommended for production)
+            service_account_base64 = settings.FIREBASE_SERVICE_ACCOUNT_BASE64
             
-            if service_account_json:
-                # Parse JSON string from environment variable
+            if service_account_base64:
+                # Decode base64 to JSON
+                import base64
+                service_account_json = base64.b64decode(service_account_base64).decode('utf-8')
                 service_account_dict = json.loads(service_account_json)
                 cred = credentials.Certificate(service_account_dict)
                 firebase_admin.initialize_app(cred)
-                print("✅ Firebase initialized with JSON credentials from environment variable")
+                print("✅ Firebase initialized with base64-encoded credentials")
                 print(f"   Project ID: {service_account_dict.get('project_id')}")
             else:
-                # Option 2: Check for file path (legacy support)
+                # Option 2: Check for file path (local development)
                 service_account_path = settings.FIREBASE_SERVICE_ACCOUNT_PATH
                 
                 if service_account_path and os.path.exists(service_account_path):

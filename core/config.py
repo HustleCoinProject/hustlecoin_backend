@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 60  # 60 days
     
     # Firebase configuration (optional)
-    FIREBASE_SERVICE_ACCOUNT_JSON: Optional[str] = None
-    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
+    FIREBASE_SERVICE_ACCOUNT_BASE64: Optional[str] = None  # Base64 encoded service account (for production)
+    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None  # File path to service account (for local dev)
     
     # Land configuration
     LAND_PRICE: int = 500  # Price in HustleCoin to buy one tile
