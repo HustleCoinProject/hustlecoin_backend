@@ -1,5 +1,6 @@
 # core/config.py
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 class Settings(BaseSettings):
     MONGO_DETAILS: str
@@ -7,6 +8,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 48  # 48 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 60  # 60 days
+    
+    # Firebase configuration (optional)
+    FIREBASE_SERVICE_ACCOUNT_JSON: Optional[str] = None
+    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
     
     # Land configuration
     LAND_PRICE: int = 500  # Price in HustleCoin to buy one tile

@@ -63,6 +63,9 @@ class User(Document):
     bank_iban: str | None = None  # IBAN for bank transfers
     bank_name: str | None = None  # Bank name
     
+    # Firebase authentication tracking
+    is_firebase_user: bool = False  # True if user signed up via Firebase/Google
+    
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

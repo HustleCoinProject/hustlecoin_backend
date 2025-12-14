@@ -18,6 +18,7 @@ from core.security import (create_access_token, create_refresh_token, get_curren
                            get_password_hash, verify_password, verify_refresh_token)
 from core.rate_limiter_slowapi import auth_limiter
 from core.game_logic import GameLogic
+from core.firebase_service import FirebaseService
 from components.shop import SHOP_ITEMS_CONFIG
 from core.translations import translate_text
 
@@ -107,6 +108,10 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class FirebaseLoginRequest(BaseModel):
+    firebase_token: str
+
+
 
 
 
@@ -171,6 +176,65 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
+@router.post("/firebase-login", response_model=Token)
+@auth_limiter.limit("5/minute")
+async def firebase_login(request: Request, firebase_data: FirebaseLoginRequest):
+    """
+    Login or register a user using Firebase ID token.
+    If the user doesn't exist, creates a new account automatically.
+    """
+    print(f"\n🔐 Firebase login attempt")
+    print(f"   Token length: {len(firebase_data.firebase_token)}")
+    print(f"   Token preview: {firebase_data.firebase_token[:80]}...")
+    
+    # Verify the Firebase ID token
+    user_info = await FirebaseService.verify_firebase_token(firebase_data.firebase_token)
+    
+    if not user_info.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not provided by Firebase authentication"
+        )
+    
+    print(f"✅ User authenticated: {user_info.get('email')}")
+    
+    # Check if user already exists
+    user = await User.find_one(User.email == user_info["email"])
+    
+    if not user:
+        # Create a new user account
+        # Generate username from email (user can change it later)
+        email_username = user_info["email"].split("@")[0]
+        username = email_username
+        
+        # Ensure username is unique
+        counter = 1
+        while await User.find_one(User.username == username):
+            username = f"{email_username}{counter}"
+            counter += 1
+        
+        print(f"📝 Creating new user: {username} ({user_info['email']})")
+        
+        # Create user with Firebase UID as identifier (no password needed)
+        user = User(
+            username=username,
+            email=user_info["email"],
+            hashed_password=get_password_hash(user_info["uid"]),  # Use Firebase UID as password
+            current_hustle="Street Vendor",  # Default starting hustle
+            language="en",  # Default language
+            is_firebase_user=True  # Mark as Firebase user
+        )
+        await user.create()
+    else:
+        print(f"👤 Existing user logging in: {user.username}")
+    
+    # Generate JWT tokens
+    access_token = create_access_token(data={"sub": user.username})
+    refresh_token = create_refresh_token(data={"sub": user.username})
+    
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
 @router.post("/refresh", response_model=Token)
 async def refresh_access_token(refresh_data: RefreshTokenRequest):
     """
@@ -213,16 +277,23 @@ async def update_profile(profile_data: UserProfileUpdate, current_user: User = D
     
     # Handle password change
     if profile_data.new_password is not None:
-        # Current password must be provided to change the password
-        if profile_data.current_password is None:
-            raise HTTPException(status_code=400, detail="Current password is required to set a new password")
-        
-        # Verify current password
-        if not verify_password(profile_data.current_password, current_user.hashed_password):
-            raise HTTPException(status_code=400, detail="Current password is incorrect")
-        
-        # Set new hashed password
-        update_fields["hashed_password"] = get_password_hash(profile_data.new_password)
+        # Firebase users can set password without current password (they don't know their auto-generated one)
+        if current_user.is_firebase_user:
+            # Firebase user setting password for the first time - no current password needed
+            update_fields["hashed_password"] = get_password_hash(profile_data.new_password)
+            update_fields["is_firebase_user"] = False  # Now they have a regular password
+            print(f"🔑 Firebase user {current_user.username} set their first password")
+        else:
+            # Regular user changing password - current password required
+            if profile_data.current_password is None:
+                raise HTTPException(status_code=400, detail="Current password is required to set a new password")
+            
+            # Verify current password
+            if not verify_password(profile_data.current_password, current_user.hashed_password):
+                raise HTTPException(status_code=400, detail="Current password is incorrect")
+            
+            # Set new hashed password
+            update_fields["hashed_password"] = get_password_hash(profile_data.new_password)
     
     # Handle email change
     if profile_data.email is not None and profile_data.email != current_user.email:

@@ -95,3 +95,6 @@ local_settings.py
 # SQLite database
 *.sqlite3
 *.db
+
+
+firebase-service-account.json

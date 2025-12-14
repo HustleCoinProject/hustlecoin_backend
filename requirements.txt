@@ -25,8 +25,12 @@ python-multipart==0.0.20
 passlib==1.7.4
 bcrypt==4.3.0
 python-jose==3.5.0
+PyJWT[crypto]==2.10.1
 cryptography==46.0.3
 ecdsa==0.19.1
+
+# Firebase Admin SDK for token verification
+firebase-admin==7.1.0
 
 # Deployment
 gunicorn==23.0.0
