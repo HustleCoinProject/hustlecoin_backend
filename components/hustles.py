@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from beanie.operators import Set, Inc
 
 from data.models import User
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.translations import translate_text
 
 router = APIRouter(prefix="/api/hustles", tags=["Hustles & Levels"])
@@ -73,7 +73,7 @@ async def get_all_hustles():
 
 
 @router.get("/available", response_model=Dict[str, str])
-async def get_available_hustles_for_user(current_user: User = Depends(get_current_user)):
+async def get_available_hustles_for_user(current_user: User = Depends(get_current_verified_user)):
     """Gets the list of hustles for the user's current level with localized names."""
     available_hustles = HUSTLE_CONFIG.get(current_user.level, [])
     return _localize_hustles(available_hustles, current_user.language)
@@ -81,7 +81,7 @@ async def get_available_hustles_for_user(current_user: User = Depends(get_curren
 
 
 @router.post("/select")
-async def select_hustle(hustle_data: HustleSelect, current_user: User = Depends(get_current_user)):
+async def select_hustle(hustle_data: HustleSelect, current_user: User = Depends(get_current_verified_user)):
     """Allows a user to change their hustle within their current level."""
     available_hustles = HUSTLE_CONFIG.get(current_user.level, [])
     
@@ -98,7 +98,7 @@ async def select_hustle(hustle_data: HustleSelect, current_user: User = Depends(
 
 
 @router.get("/level-status", response_model=LevelStatusResponse)
-async def get_level_status(current_user: User = Depends(get_current_user)):
+async def get_level_status(current_user: User = Depends(get_current_verified_user)):
     """Gets the user's current progress towards the next level upgrade."""
     next_level = current_user.level + 1
     requirements = LEVEL_REQUIREMENTS.get(next_level)
@@ -139,7 +139,7 @@ async def get_level_status(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/level-upgrade", response_model=UpgradeResponse)
-async def upgrade_user_level(current_user: User = Depends(get_current_user)):
+async def upgrade_user_level(current_user: User = Depends(get_current_verified_user)):
     """Attempts to upgrade the user's level if they meet all criteria."""
     status_response = await get_level_status(current_user=current_user)
     

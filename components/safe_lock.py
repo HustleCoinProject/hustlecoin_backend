@@ -8,7 +8,7 @@ from beanie.operators import Inc, Set
 import random
 
 from data.models import User
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.translations import translate_text
 from components.shop import SHOP_ITEMS_CONFIG
 from core.cache import SimpleCache
@@ -231,7 +231,7 @@ async def get_global_safe_lock_stats(request: Request):
 @api_limiter.limit("30/minute")
 async def get_safe_lock_status(
     request: Request,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """
     Get current safe lock status for the user.
@@ -266,7 +266,7 @@ async def get_safe_lock_status(
 async def deposit_to_safe_lock(
     request: Request,
     deposit_request: SafeLockDepositRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """
     Deposit HC to safe lock. Funds will be locked for 7 days.
@@ -306,7 +306,7 @@ async def deposit_to_safe_lock(
 @api_limiter.limit("10/minute")
 async def claim_safe_lock(
     request: Request,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """
     Claim safe lock funds after 7 days have passed.

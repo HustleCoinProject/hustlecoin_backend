@@ -66,7 +66,7 @@ class UserRegister(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     username: str = Field(..., min_length=3, max_length=30)
     current_hustle: str = "Street Vendor"  # Default starting hustle
-    language: str = "en"  # Default language
+    language: str = "pt"  # Default language
 
     @validator("email")
     def validate_email_length(cls, v: EmailStr) -> EmailStr:
@@ -221,12 +221,17 @@ async def firebase_login(request: Request, firebase_data: FirebaseLoginRequest):
             email=user_info["email"],
             hashed_password=get_password_hash(user_info["uid"]),  # Use Firebase UID as password
             current_hustle="Street Vendor",  # Default starting hustle
-            language="en",  # Default language
-            is_firebase_user=True  # Mark as Firebase user
+            language="pt",  # Default language
+            is_firebase_user=True,  # Mark as Firebase user
+            is_email_verified=True  # Auto-verify email for Firebase/Google OAuth users
         )
         await user.create()
     else:
         print(f"👤 Existing user logging in: {user.username}")
+        # Ensure existing Firebase users have verified email (for users created before this feature)
+        if not user.is_email_verified:
+            user.is_email_verified = True
+            await user.save()
     
     # Generate JWT tokens
     access_token = create_access_token(data={"sub": user.username})

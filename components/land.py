@@ -8,7 +8,7 @@ from beanie import PydanticObjectId
 from beanie.operators import Inc, In, Set
 
 from data.models import User, LandTile
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.game_logic import GameLogic
 from core.config import settings
 
@@ -97,7 +97,7 @@ async def get_tiles_in_bbox(
 
 
 @router.get("/my-lands", response_model=List[MyLandTile])
-async def get_my_lands(current_user: User = Depends(get_current_user)):
+async def get_my_lands(current_user: User = Depends(get_current_verified_user)):
     """Retrieves all land tiles owned by the current user."""
     my_tiles = await LandTile.find(LandTile.owner_id == current_user.id).to_list()
     # Here you could add logic to check for 'land_multiplier' boosters in user inventory
@@ -109,7 +109,7 @@ async def get_my_lands(current_user: User = Depends(get_current_user)):
 async def buy_land_tile(
     request: Request,
     h3_index: str, 
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """Purchases a single land tile for the current user."""
     if not h3.is_valid_cell(h3_index):
@@ -172,7 +172,7 @@ async def buy_land_tile(
 
 
 @router.post("/sell/{h3_index}")
-async def sell_land_tile(h3_index: str, current_user: User = Depends(get_current_user)):
+async def sell_land_tile(h3_index: str, current_user: User = Depends(get_current_verified_user)):
     """Sells a land tile owned by the user back to the system."""
     tile_to_sell = await LandTile.find_one(
         LandTile.h3_index == h3_index,
@@ -190,7 +190,7 @@ async def sell_land_tile(h3_index: str, current_user: User = Depends(get_current
 
 
 @router.post("/claim-income", response_model=LandIncomeClaimResponse)
-async def claim_land_income(current_user: User = Depends(get_current_user)):
+async def claim_land_income(current_user: User = Depends(get_current_verified_user)):
     """
     Claims land income for all tiles owned by the user.
     Can only be claimed once every 24 hours.
@@ -290,7 +290,7 @@ async def claim_land_income(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/claim-status", response_model=LandIncomeStatus)
-async def get_land_income_status(current_user: User = Depends(get_current_user)):
+async def get_land_income_status(current_user: User = Depends(get_current_verified_user)):
     """
     Gets the current status of land income claiming for the user.
     Shows available income, claim cooldown status, and timing information.

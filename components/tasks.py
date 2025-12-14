@@ -9,7 +9,7 @@ from beanie.operators import Inc, Set
 import random
 
 from data.models import User, Quiz
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.game_logic import GameLogic
 from core.cache import SimpleCache
 
@@ -95,7 +95,7 @@ async def get_all_tasks():
 async def complete_task(
     request: Request,
     completion_data: TaskComplete,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """
     A generic endpoint to mark a task as completed and claim a reward.
@@ -243,7 +243,7 @@ async def _fetch_all_active_quizzes() -> List[Quiz]:
 # DOCS: Uses PyMongo here directly due to a bug that Motor/Beanie
 #      has version mis-match with PyMongo. Bug is in Beanie or Motor.
 @router.get("/quiz/fetch", response_model=QuizQuestionResponse)
-async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
+async def fetch_quiz_question(current_user: User = Depends(get_current_verified_user)):
     """Fetches a random quiz question for the quiz_game task (cached for 30 minutes)."""
     user_lang = current_user.language
 
@@ -264,7 +264,7 @@ async def fetch_quiz_question(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/status", response_model=List[TaskStatus])
-async def get_task_status(current_user: User = Depends(get_current_user)):
+async def get_task_status(current_user: User = Depends(get_current_verified_user)):
     """Get the status of all tasks for the current user."""
     now = datetime.utcnow()
     task_statuses = []

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from beanie.operators import Inc, Push, And, Set
 
 from data.models import User, InventoryItem
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.translations import translate_text, translate_dict_values
 
 
@@ -150,7 +150,7 @@ class PurchaseRequest(BaseModel):
 
 
 @router.get("/items", response_model=List[ShopItemOut])
-async def list_shop_items(current_user: User = Depends(get_current_user)):
+async def list_shop_items(current_user: User = Depends(get_current_verified_user)):
     """Lists all active items available for purchase from the static config, translated to user's language."""
     user_language = current_user.language
     translated_items = []
@@ -175,7 +175,7 @@ async def list_shop_items(current_user: User = Depends(get_current_user)):
 async def purchase_item(
     request: Request,
     purchase_data: PurchaseRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     item_data = SHOP_ITEMS_CONFIG.get(purchase_data.item_id)
     

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from beanie.operators import Inc, Set, And
 
 from data.models import User
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.game_logic import GameLogic
 
 router = APIRouter(prefix="/api/tapping", tags=["Tapping System"])
@@ -61,7 +61,7 @@ def should_reset_daily_taps(user: User) -> bool:
 async def process_tap_batch(
     request: Request,
     tap_request: TapRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """
     Process a batch of taps and award HC based on daily limits.
@@ -173,7 +173,7 @@ async def process_tap_batch(
 
 
 @router.get("/status", response_model=TapStatusResponse)
-async def get_tap_status(current_user: User = Depends(get_current_user)):
+async def get_tap_status(current_user: User = Depends(get_current_verified_user)):
     """Get current tapping status for the user."""
     today = date.today()
     

@@ -91,3 +91,22 @@ async def verify_refresh_token(token: str) -> str:
         raise credentials_exception
     
     return username
+
+async def get_current_verified_user(token: str = Depends(oauth2_scheme)) -> "User":
+    """
+    Get current user and verify their email is verified.
+    This should be used for protected endpoints that require email verification.
+    """
+    from data.models import User
+
+    # First get the current user (validates authentication)
+    user = await get_current_user(token)
+    
+    # Check if email is verified
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Please verify your email address to access this feature.",
+        )
+    
+    return user

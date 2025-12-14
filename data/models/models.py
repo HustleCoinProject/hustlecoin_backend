@@ -65,6 +65,7 @@ class User(Document):
     
     # Firebase authentication tracking
     is_firebase_user: bool = False  # True if user signed up via Firebase/Google
+    is_email_verified: bool = False  # True if email is verified (auto-true for Firebase/Google OAuth)
     
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Dict, Optional
 
 from data.models import User, Payout
-from core.security import get_current_user
+from core.security import get_current_user, get_current_verified_user
 from core.config import settings
 from core.translations import translate_text
 
@@ -172,7 +172,7 @@ async def get_available_payout_methods():
 
 
 @router.get("/info", response_model=UserPayoutInfo)
-async def get_user_payout_info(current_user: User = Depends(get_current_user)):
+async def get_user_payout_info(current_user: User = Depends(get_current_verified_user)):
     """Get user's payout information and available balance."""
     return UserPayoutInfo(
         phone_number=current_user.phone_number,
@@ -191,7 +191,7 @@ async def get_user_payout_info(current_user: User = Depends(get_current_user)):
 @router.put("/info", response_model=UserPayoutInfo)
 async def update_payout_info(
     payout_info: UserPayoutInfoUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_verified_user)
 ):
     """Update user's payout information."""
     update_fields = {}
