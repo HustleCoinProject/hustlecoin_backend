@@ -655,7 +655,7 @@ class AdminRegistry:
 # Auto-register models from data.models
 def auto_register_models():
     """Automatically register models with safe field configurations."""
-    from data.models.models import User, Quiz, LandTile, Payout
+    from data.models.models import User, Quiz, LandTile, Payout, SystemSettings
     from admin.models import AdminUser
     
     # Register User model with STRICT SAFETY CONTROLS
@@ -734,6 +734,20 @@ def auto_register_models():
                 "amount_kwanza", "conversion_rate", "payout_method",
                 "phone_number", "full_name", "national_id", "bank_iban", "bank_name"
             ],
+            exclude_fields=["revision_id", "_id", "__v"]
+        )
+    )
+    
+    # Register SystemSettings model for scheduler monitoring
+    AdminRegistry.register(
+        SystemSettings,
+        AdminModelConfig(
+            SystemSettings,
+            verbose_name="System Setting",
+            verbose_name_plural="System Settings",
+            list_display=["setting_key", "is_locked", "last_executed_at", "updated_at"],
+            # Most fields readonly for safety - allow manual lock release if needed
+            readonly_fields=["id", "setting_key", "locked_at", "last_executed_at", "metadata", "updated_at"],
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )

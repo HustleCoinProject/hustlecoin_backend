@@ -45,6 +45,10 @@ faker==37.11.0
 slowapi==0.1.9
 redis==7.1.0
 
+# Task Scheduling
+apscheduler==3.11.1
+pytz==2025.2
+
 # Pinned Sub-dependencies (These ensure the server matches local Python 3.11 environment exactly)
 starlette==0.48.0
 anyio==4.11.0

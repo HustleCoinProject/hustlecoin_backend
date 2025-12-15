@@ -11,7 +11,7 @@ except Exception:  # pragma: no cover
     from pydantic import validator
 from beanie import Document, PydanticObjectId
 from beanie.odm.fields import Indexed as IndexedField
-from typing import Dict, List, Annotated
+from typing import Any, Dict, List, Annotated
 
 
 # ===== USER MODEL =====
@@ -140,3 +140,18 @@ class Payout(Document):
             [("user_id", 1), ("created_at", -1)],  # For user payout history
             [("status", 1), ("created_at", -1)]      # For admin pending payouts
         ]
+
+
+# ===== SYSTEM SETTINGS MODEL =====
+
+class SystemSettings(Document):
+    """Global system settings and flags for scheduled tasks."""
+    setting_key: Annotated[str, IndexedField(unique=True)]  # e.g., "rank_reset_lock"
+    is_locked: bool = False
+    locked_at: datetime | None = None
+    last_executed_at: datetime | None = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "system_settings"

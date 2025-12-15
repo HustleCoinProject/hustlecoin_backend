@@ -6,10 +6,22 @@ from core.rate_limiter_slowapi import setup_rate_limiting, check_redis_health
 from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock
 from admin import admin_router
 from admin.registry import auto_register_models
+from admin.background_tasks import reset_all_rank_points
 
 from datetime import datetime, timedelta, date
 import asyncio
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize scheduler (will be started on app startup)
+scheduler = AsyncIOScheduler()
 
 
 app = FastAPI(
@@ -67,6 +79,29 @@ async def on_startup():
     auto_register_models()
     print("Admin models registered.")
     
+    # Setup scheduled tasks
+    print("Setting up scheduled tasks...")
+    try:
+        # Schedule weekly rank reset: Every Monday at midnight Angola time (WAT = UTC+1)
+        angola_tz = pytz.timezone('Africa/Luanda')
+        scheduler.add_job(
+            reset_all_rank_points,
+            trigger=CronTrigger(
+                day_of_week='mon',  # Monday
+                hour=0,             # Midnight
+                minute=0,           # 00:00
+                timezone=angola_tz
+            ),
+            id='weekly_rank_reset',
+            name='Reset all user rank points to 0',
+            replace_existing=True,
+            max_instances=1  # Prevent concurrent executions in same instance
+        )
+        scheduler.start()
+        logger.info("✅ Scheduler started - Weekly rank reset scheduled for Mondays at 00:00 Angola time")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to start scheduler: {e}")
+    
     # Start background tasks
     print("Starting background tasks...")
     asyncio.create_task(redis_health_monitor())
@@ -78,7 +113,15 @@ async def on_startup():
 async def on_shutdown():
     """Clean shutdown of the application."""
     print("Shutting down HustleCoin Backend...")
-    # Add any cleanup tasks here
+    
+    # Shutdown scheduler gracefully
+    try:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+            logger.info("Scheduler shut down successfully")
+    except Exception as e:
+        logger.error(f"Error shutting down scheduler: {e}")
+    
     print("Shutdown complete.")
 
 # --- Include Component Routers ---
