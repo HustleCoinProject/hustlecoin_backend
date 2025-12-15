@@ -256,8 +256,16 @@ class AdminRegistry:
         # Get the origin type for generic types
         origin_type = get_origin(field_type)
         
+        # Check field type first before checking field name patterns
+        # This ensures booleans are correctly identified as checkboxes even if they contain "email" in name
+        if field_type == bool or str(field_type) == 'bool':
+            return 'checkbox'
+        
+        elif field_type in [int, float] or str(field_type) in ['int', 'float']:
+            return 'number'
+        
         # Handle primitive types
-        if field_type == str or field_type == 'str':
+        elif field_type == str or field_type == 'str':
             if 'password' in field_name.lower():
                 return 'password'
             elif 'email' in field_name.lower():
@@ -272,12 +280,6 @@ class AdminRegistry:
         # Handle EmailStr type specifically
         elif 'EmailStr' in str(field_type) or 'email' in field_name.lower():
             return 'email'
-        
-        elif field_type in [int, float] or str(field_type) in ['int', 'float']:
-            return 'number'
-        
-        elif field_type == bool or str(field_type) == 'bool':
-            return 'checkbox'
         
         elif field_type in [datetime, date] or str(field_type) in ['datetime', 'date']:
             return 'datetime'
