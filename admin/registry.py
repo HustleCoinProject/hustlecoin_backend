@@ -491,8 +491,8 @@ class AdminRegistry:
             if field_name in form_data:
                 raw_value = form_data[field_name]
                 
-                # Skip empty values for optional fields
-                if not raw_value and not field_info_obj.is_required:
+                # Skip empty values for optional fields (except checkboxes)
+                if not raw_value and not field_info_obj.is_required and field_info_obj.widget != 'checkbox':
                     continue
                 
                 try:
@@ -510,6 +510,10 @@ class AdminRegistry:
                     print(f"[SAFE EDIT] Warning: Failed to convert safe field '{field_name}' with value '{raw_value}': {e}")
                     # Skip problematic fields to prevent data corruption
                     continue
+            elif field_info_obj.widget == 'checkbox':
+                # CRITICAL: Unchecked checkboxes don't send data, so we must explicitly set them to False
+                processed_data[field_name] = False
+                print(f"[SAFE EDIT] Processed unchecked checkbox: {field_name} = False")
         
         # Log any fields that were ignored for security
         ignored_fields = set(form_data.keys()) - set(editable_fields.keys())
