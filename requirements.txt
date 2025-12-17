@@ -55,3 +55,6 @@ anyio==4.11.0
 annotated-types==0.7.0
 pydantic-core==2.41.5
 typing-extensions==4.15.0
+
+# More pinned dependencies
+httpx==0.28.1
