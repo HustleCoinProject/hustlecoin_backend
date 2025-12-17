@@ -15,21 +15,22 @@ from core.cache import SimpleCache
 
 router = APIRouter(prefix="/api/tasks", tags=["Tasks & Quizzes"])
 
-# Cache for quiz list (30 minutes)
-quiz_cache = SimpleCache[List[Quiz]](ttl_seconds=1800)
+# Cache for quiz list (1 hour)
+quiz_cache = SimpleCache[List[Quiz]](ttl_seconds=3600)
 
 # --- Task Configuration ---
 # This dictionary defines all available tasks, their rewards, cooldowns in seconds, and rank points.
 # 'type' can be 'INSTANT' (like watching an ad) or 'QUIZ'.
 # 'rank_points' represent user activity and engagement - they don't decrease on purchases
 TASK_CONFIG = {
-    # Daily login thing
+    # Daily login thing (idk that star feature that increases streak)
     "daily_check_in": {"reward": 50, "rank_points": 3, "cooldown_seconds": 79200, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
 
     # Daily tasks thing
     "watch_ad": {"reward": 100, "rank_points": 1, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 75, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
+    "mini_game_played": {"reward": 20, "rank_points": 1, "cooldown_seconds": 60, "type": "INSTANT", "description": "Play a mini-game"},
 }
 
 
@@ -149,6 +150,9 @@ async def complete_task(
         # In a real app, you might have server-to-server ad validation logic here
         
     elif task_id == "daily_tap":
+        base_reward_amount = config["reward"]
+
+    elif task_id == "mini_game_played":
         base_reward_amount = config["reward"]
 
     elif task_id == "quiz_game":

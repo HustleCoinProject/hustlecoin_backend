@@ -588,6 +588,7 @@ async def import_payouts_csv(
     import csv
     import io
     from .models import PayoutCSVImportRow
+    from beanie.operators import In
     
     # Basic file validation
     if not csv_file.filename.lower().endswith('.csv'):
@@ -604,11 +605,28 @@ async def import_payouts_csv(
     if missing_columns:
         raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing_columns)}")
     
-    # Validate all rows
+    # Pre-process CSV to get IDs for batch fetch
+    rows = list(csv_reader)
+    payout_ids_to_fetch = []
+    
+    for row in rows:
+        pid = row.get('payout_id', '').strip()
+        if pid:
+            try:
+                payout_ids_to_fetch.append(PydanticObjectId(pid))
+            except:
+                pass # Invalid IDs will be caught in main loop
+                
+    # --- OPTIMIZATION: BATCH FETCH (N+1 FIX) ---
+    # Fetch all payouts in one query instead of one per row
+    payouts_batch = await Payout.find(In(Payout.id, payout_ids_to_fetch)).to_list()
+    payout_map = {str(p.id): p for p in payouts_batch}
+    
     validation_errors = []
     payouts_to_process = []
+    skipped_count = 0
     
-    for row_num, row in enumerate(csv_reader, start=2):
+    for row_num, row in enumerate(rows, start=2):
         payout_id = row.get('payout_id', '').strip()
         action = row.get('action', '').strip()
         admin_notes = row.get('admin_notes', '').strip()
@@ -631,17 +649,18 @@ async def import_payouts_csv(
             validation_errors.append(f"Row {row_num}: Rejection reason required for 'reject' action")
             continue
         
-        # Validate payout exists and is pending
-        try:
-            payout = await Payout.get(PydanticObjectId(payout_id))
-            if not payout:
-                validation_errors.append(f"Row {row_num}: Payout {payout_id} not found")
-                continue
-            if payout.status != 'pending':
-                validation_errors.append(f"Row {row_num}: Payout {payout_id} is not pending (status: {payout.status})")
-                continue
-        except Exception as e:
-            validation_errors.append(f"Row {row_num}: Invalid payout_id or error: {str(e)}")
+        # Validate payout exists
+        payout = payout_map.get(payout_id)
+        if not payout:
+            validation_errors.append(f"Row {row_num}: Payout {payout_id} not found")
+            continue
+            
+        # --- IDEMPOTENCY FIX ---
+        # If payout is NOT pending, just skip it (it's already processed)
+        # This allows safe re-uploads of the same CSV
+        if payout.status != 'pending':
+            skipped_count += 1
+            print(f"Skipping row {row_num}: Payout {payout_id} already processed (status: {payout.status})")
             continue
         
         # Add to processing list
@@ -668,16 +687,28 @@ async def import_payouts_csv(
             status_code=status.HTTP_302_FOUND
         )
     
-    if not payouts_to_process:
+    if not payouts_to_process and skipped_count == 0:
         return RedirectResponse(
             url="/admin/payouts/pending?csv_error=1&error_msg=No valid payouts found to process",
+            status_code=status.HTTP_302_FOUND
+        )
+        
+    if not payouts_to_process and skipped_count > 0:
+         return RedirectResponse(
+             # Special message for "All skipped"
+            url=f"/admin/payouts/pending?csv_error=1&error_msg=All {skipped_count} payouts in CSV were already processed (skipped).",
             status_code=status.HTTP_302_FOUND
         )
     
     # Start background processing
     background_tasks.add_task(process_payouts_background, payouts_to_process, admin_user.username)
     
-    # Redirect with success
+    # Redirect with success - include skipped info in message
+    msg = f"Processing {len(payouts_to_process)} payouts."
+    if skipped_count > 0:
+        msg += f" (Skipped {skipped_count} already processed)"
+        
+    from urllib.parse import quote
     return RedirectResponse(
         url=f"/admin/payouts/pending?csv_success=1&count={len(payouts_to_process)}",
         status_code=status.HTTP_302_FOUND

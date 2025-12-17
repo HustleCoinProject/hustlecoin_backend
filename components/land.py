@@ -15,7 +15,7 @@ from core.config import settings
 router = APIRouter(prefix="/api/land", tags=["Land System"])
 
 # --- Game Configuration ---
-MAP_RESOLUTION = 8
+# MAP_RESOLUTION = 8  <-- Removed, using settings.H3_TILE_INDEX_RESOLUTION instead
 
 # --- DTOs ---
 class TileInfo(BaseModel):
@@ -76,7 +76,7 @@ async def get_tiles_in_bbox(
     }
 
     # Get all potential H3 indexes within the polygon at the defined resolution
-    h3_indexes = list(h3.geo_to_cells(geojson_polygon, MAP_RESOLUTION))
+    h3_indexes = list(h3.geo_to_cells(geojson_polygon, settings.H3_TILE_INDEX_RESOLUTION))
 
     if not h3_indexes:
         return []
@@ -117,6 +117,16 @@ async def buy_land_tile(
 
     if current_user.hc_balance < settings.LAND_PRICE:
         raise HTTPException(status_code=402, detail="Insufficient HustleCoin to buy land.")
+
+    # Check land purchase limit (5 * level)
+    max_land = 5 * current_user.level
+    current_land_count = await LandTile.find(LandTile.owner_id == current_user.id).count()
+    
+    if current_land_count >= max_land:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Land limit reached! Your current level {current_user.level} allows max {max_land} land tiles."
+        )
         
     # Award rank points for land purchase (5 points for investing in land)
     land_purchase_rank_points = await GameLogic.calculate_rank_point_reward(
