@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from core.rate_limiter_slowapi import api_limiter
 from pydantic import BaseModel, Field
-from beanie.operators import Inc, Set
+from beanie.operators import Inc, Set, And
 import random
 
 from data.models import User
@@ -335,24 +335,22 @@ async def claim_safe_lock(
     # Calculate reward
     reward = await calculate_safe_lock_reward(current_user)
     
-    # Store the amount to return
+    # Calculate total amount to add to balance (principal + reward)
     returned_amount = current_user.safe_lock_amount
+    hc_increase = returned_amount
+    if reward.reward_type == "HC":
+        hc_increase += reward.hc_amount
     
     # Prepare update operations
-    update_operations = {
-        User.hc_balance: returned_amount,  # Return locked amount
-        User.safe_lock_amount: -current_user.safe_lock_amount  # Reset safe lock to 0
-    }
+    # specific_ops = {}
     
-    # Apply reward
-    if reward.reward_type == "HC":
-        update_operations[User.hc_balance] += reward.hc_amount
-    elif reward.reward_type == "ITEM":
-        # Add item to inventory
+    # If item reward, handle inventory update
+    if reward.reward_type == "ITEM":
+        # Add item to inventory logic...
         from data.models import InventoryItem
         from components.shop import clean_and_update_inventory
         
-        # Get item config to determine expiry
+        # Get item config
         item_config = SHOP_ITEMS_CONFIG.get(reward.item_id)
         expires_at = None
         
@@ -369,21 +367,38 @@ async def claim_safe_lock(
         )
         
         # Clean and update inventory
+        # We need to act on a copy of inventory since we might restart transaction if concurrency fails?
+        # Ideally we'd do this inside a transaction, but Mongo atomic update is good enough here.
         updated_inventory = clean_and_update_inventory(current_user.inventory, new_item)
         
-        # Update user with new inventory
-        await current_user.update(
-            Inc(update_operations),
+        # Atomically update user: Set safe lock to 0, Add balance, Set new inventory
+        update_result = await User.find_one(
+            And(User.id == current_user.id, User.safe_lock_amount > 0)
+        ).update(
             Set({
-                User.inventory: updated_inventory,
-                User.safe_lock_locked_until: None
-            })
+                User.safe_lock_amount: 0,
+                User.safe_lock_locked_until: None,
+                User.inventory: updated_inventory
+            }),
+            Inc({User.hc_balance: hc_increase})
         )
     else:
-        # Just HC reward, simpler update
-        await current_user.update(
-            Inc(update_operations),
-            Set({User.safe_lock_locked_until: None})
+        # Standard HC reward update
+        # Atomically update user: Set safe lock to 0, Add balance
+        update_result = await User.find_one(
+            And(User.id == current_user.id, User.safe_lock_amount > 0)
+        ).update(
+            Set({
+                User.safe_lock_amount: 0,
+                User.safe_lock_locked_until: None
+            }),
+            Inc({User.hc_balance: hc_increase})
+        )
+    
+    if not update_result:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to claim safe lock. It may have already been claimed."
         )
     
     # Refresh user data

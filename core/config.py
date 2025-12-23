@@ -194,7 +194,14 @@ class Settings(BaseSettings):
     LAND_INCOME_ACCUMULATE: bool = False  # If True, income accumulates over days; if False, fixed daily amount
     
     # Payout configuration
-    PAYOUT_CONVERSION_RATE: float = 10.0  # 1 Kwanza = 10 HC
+    @property
+    def HC_TO_KZ_RATE(self) -> float:
+        # Default: 20
+        return remote_config_manager.get_value("HC_TO_KZ_RATE", 20.0, float)
+
+    @property
+    def PAYOUT_CONVERSION_RATE(self) -> float:
+        return self.HC_TO_KZ_RATE
     MINIMUM_PAYOUT_HC: int = 10000  # Minimum HC required for payout (10,000 HC = 1,000 Kwanza)
     MAXIMUM_PAYOUT_HC: int = 30000  # Maximum HC allowed per payout (30,000 HC = 3,000 Kwanza)
     
