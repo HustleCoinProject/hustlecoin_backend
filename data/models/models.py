@@ -155,3 +155,26 @@ class SystemSettings(Document):
 
     class Settings:
         name = "system_settings"
+
+
+# ===== NOTIFICATION MODEL =====
+
+class Notification(Document):
+    user_id: Annotated[PydanticObjectId, IndexedField()] # The user who receives the notification
+    title: str
+    message: str
+    type: Annotated[str, IndexedField()] # e.g., "payout_status", "system_alert"
+    is_read: Annotated[bool, IndexedField()] = False
+    
+    # Optional metadata for deep linking or extra info
+    # e.g., {"payout_id": "..."}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    created_at: Annotated[datetime, IndexedField()] = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "notifications"
+        indexes = [
+            [("user_id", 1), ("created_at", -1)], # frequent query: get user's notifications sorted by time
+            [("user_id", 1), ("is_read", 1)]       # frequent query: get user's unread notifications
+        ]

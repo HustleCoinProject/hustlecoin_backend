@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from core.database import init_db
 from core.rate_limiter_slowapi import setup_rate_limiting, check_redis_health
-from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock
+from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock, notifications
 from admin import admin_router
 from admin.registry import auto_register_models
 from admin.background_tasks import reset_all_rank_points
@@ -134,6 +134,7 @@ app.include_router(land.router)
 app.include_router(tapping.router)
 app.include_router(payouts.router)
 app.include_router(safe_lock.router)
+app.include_router(notifications.router)
 
 # Add the dev router here
 app.include_router(dev.router)

@@ -14,6 +14,7 @@ class LeaderboardEntry(BaseModel):
     username: str
     rank_points: int = 0  # Default to 0 for existing users without this field
     level: int
+    current_hustle: str
     hc_balance: int  # Still include for reference
 
 async def _fetch_fresh_leaderboard() -> List[LeaderboardEntry]:
@@ -28,6 +29,7 @@ async def _fetch_fresh_leaderboard() -> List[LeaderboardEntry]:
                 "username": 1,
                 "rank_points": 1,
                 "level": 1,
+                "current_hustle": 1,
                 "hc_balance": 1
             }
         }
@@ -42,6 +44,7 @@ async def _fetch_fresh_leaderboard() -> List[LeaderboardEntry]:
             username=doc["username"],
             rank_points=doc.get("rank_points", 0),
             level=doc["level"],
+            current_hustle=doc.get("current_hustle", "Street Vendor"),
             hc_balance=doc["hc_balance"]
         )
         for doc in results

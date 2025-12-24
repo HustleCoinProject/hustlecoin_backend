@@ -7,7 +7,7 @@ async def init_db():
     """Initializes the Beanie ODM and database connection."""
     
     # --- FIX: Import models inside the function to avoid circular imports at startup ---
-    from data.models import User, Quiz, LandTile, Payout, SystemSettings
+    from data.models import User, Quiz, LandTile, Payout, SystemSettings, Notification
     from admin.models import AdminUser
 
 
@@ -21,6 +21,7 @@ async def init_db():
             Payout,
             SystemSettings,
             AdminUser,
+            Notification,
             # Add other Beanie models here as you create them
         ]
     )

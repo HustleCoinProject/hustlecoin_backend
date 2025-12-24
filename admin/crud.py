@@ -6,6 +6,7 @@ from bson import ObjectId
 from .registry import AdminRegistry
 import json
 from datetime import datetime
+from data.models.models import Payout, User, Notification
 
 
 # This old AdminCRUD class is not needed with the new registry system

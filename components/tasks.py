@@ -24,13 +24,13 @@ quiz_cache = SimpleCache[List[Quiz]](ttl_seconds=3600)
 # 'rank_points' represent user activity and engagement - they don't decrease on purchases
 TASK_CONFIG = {
     # Daily login thing (idk that star feature that increases streak)
-    "daily_check_in": {"reward": 50, "rank_points": 3, "cooldown_seconds": 79200, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
+    "daily_check_in": {"reward": 50, "rank_points": 3, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
 
     # Daily tasks thing
-    "watch_ad": {"reward": 100, "rank_points": 1, "cooldown_seconds": 60, "type": "INSTANT", "description": "Watch a video ad"},
+    "watch_ad": {"reward": 100, "rank_points": 1, "cooldown_seconds": 3600, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 75, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
-    "mini_game_played": {"reward": 20, "rank_points": 1, "cooldown_seconds": 60, "type": "INSTANT", "description": "Play a mini-game"},
+    "mini_game_played": {"reward": 20, "rank_points": 1, "cooldown_seconds": 30, "type": "INSTANT", "description": "Play a mini-game"},
 }
 
 
@@ -216,6 +216,10 @@ async def complete_task(
         cooldown_expiry = datetime.utcnow() + timedelta(seconds=actual_cooldown_seconds)
         updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
     
+    # Capture original values before update to avoid double counting
+    original_balance = current_user.hc_balance
+    original_rank_points = current_user.rank_points
+
     # Update user balance and rank points
     update_inc = {}
     if final_reward > 0:
@@ -232,8 +236,8 @@ async def complete_task(
 
     return BalanceUpdateResponse(
         message=f"Task '{task_id}' completed successfully!",
-        new_balance=current_user.hc_balance + final_reward,
-        new_rank_points=current_user.rank_points + final_rank_points,
+        new_balance=original_balance + final_reward,
+        new_rank_points=original_rank_points + final_rank_points,
         rank_points_earned=final_rank_points,
         cooldown_expires_at=cooldown_expiry
     )
