@@ -1,5 +1,6 @@
 # app.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from core.database import init_db
 from core.rate_limiter_slowapi import setup_rate_limiting, check_redis_health
@@ -29,6 +30,42 @@ app = FastAPI(
     description="A clean, modular backend using FastAPI and Beanie ODM.",
     version="1.0.0"
 )
+
+
+# Configuration: Methods that strictly require the client key
+# MODIFY HERE: Add "GET", "PUT", etc. to this set to protect them as well
+PROTECTED_METHODS = {"POST", "PUT", "DELETE", "PATCH"} 
+
+# Define public paths that don't require the key (whitelist)
+PUBLIC_PATHS = {
+    "/docs", 
+    "/redoc", 
+    "/openapi.json", 
+    "/health", 
+    "/health/ready",
+    "/admin"
+}
+
+# Middleware to verify custom client key (stub)
+@app.middleware("http")
+async def verify_client_key(request: Request, call_next):
+    # Always allow access to public paths and admin static files
+    path = request.url.path
+    if path in PUBLIC_PATHS or path.startswith("/admin/static"):
+        return await call_next(request)
+        
+    # Only enforce check for specified methods
+    if request.method in PROTECTED_METHODS:
+        # Check for the custom header
+        # User specified stub value: "scooby doo"
+        client_key = request.headers.get("x-hustle-coin-client-key")
+        if client_key != "scooby doo":
+            return JSONResponse(
+                status_code=403, 
+                content={"detail": "Access denied: Missing or invalid client key"}
+            )
+        
+    return await call_next(request)
 
 # Setup rate limiting
 setup_rate_limiting(app)
