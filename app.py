@@ -42,16 +42,15 @@ PUBLIC_PATHS = {
     "/redoc", 
     "/openapi.json", 
     "/health", 
-    "/health/ready",
-    "/admin"
+    "/health/ready"
 }
 
 # Middleware to verify custom client key (stub)
 @app.middleware("http")
 async def verify_client_key(request: Request, call_next):
-    # Always allow access to public paths and admin static files
+    # Always allow access to public paths and admin routes
     path = request.url.path
-    if path in PUBLIC_PATHS or path.startswith("/admin/static"):
+    if path in PUBLIC_PATHS or path.startswith("/admin"):
         return await call_next(request)
         
     # Only enforce check for specified methods
