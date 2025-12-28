@@ -24,13 +24,13 @@ quiz_cache = SimpleCache[List[Quiz]](ttl_seconds=3600)
 # 'rank_points' represent user activity and engagement - they don't decrease on purchases
 TASK_CONFIG = {
     # Daily login thing (idk that star feature that increases streak)
-    "daily_check_in": {"reward": 50, "rank_points": 3, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
+    "daily_check_in": {"reward": 30, "rank_points": 3, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
 
     # Daily tasks thing
-    "watch_ad": {"reward": 100, "rank_points": 1, "cooldown_seconds": 3600, "type": "INSTANT", "description": "Watch a video ad"},
+    "watch_ad": {"reward": 120, "rank_points": 1, "cooldown_seconds": 3600, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
-    "quiz_game": {"reward": 75, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
-    "mini_game_played": {"reward": 20, "rank_points": 1, "cooldown_seconds": 30, "type": "INSTANT", "description": "Play a mini-game"},
+    "quiz_game": {"reward": 40, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
+    "mini_game_played": {"reward": 10, "rank_points": 1, "cooldown_seconds": 30, "type": "INSTANT", "description": "Play a mini-game"},
 }
 
 

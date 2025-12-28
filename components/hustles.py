@@ -24,10 +24,10 @@ HUSTLE_CONFIG: Dict[int, List[str]] = {
 
 LEVEL_REQUIREMENTS: Dict[int, Dict[str, int]] = {
     # Key is the level you are trying to upgrade TO (so key 2 is for upgrading from 1 to 2)
-    2: {"days_in_level": 3, "hc_earned": 1000, "upgrade_fee": 500},
-    3: {"days_in_level": 5, "hc_earned": 5000, "upgrade_fee": 2500},
-    4: {"days_in_level": 7, "hc_earned": 20000, "upgrade_fee": 10000},
-    5: {"days_in_level": 10, "hc_earned": 100000, "upgrade_fee": 50000},
+    2: {"days_in_level": 3, "hc_earned": 1000, "upgrade_fee": 2000},    # Fee increased 500 -> 2000
+    3: {"days_in_level": 5, "hc_earned": 5000, "upgrade_fee": 10000},   # Fee increased 2500 -> 10000
+    4: {"days_in_level": 7, "hc_earned": 20000, "upgrade_fee": 50000},  # Fee increased 10000 -> 50000
+    5: {"days_in_level": 10, "hc_earned": 100000, "upgrade_fee": 200000}, # Fee increased 50000 -> 200000
 }
 
 # --- DTOs (Data Transfer Objects) ---

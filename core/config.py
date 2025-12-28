@@ -177,20 +177,20 @@ class Settings(BaseSettings):
     
     @property
     def LAND_PRICE(self) -> int:
-        # Default: 500
-        return remote_config_manager.get_value("LAND_BUY_PRICE", 500, int)
+        # Default: 2000
+        return remote_config_manager.get_value("LAND_BUY_PRICE", 2000, int)
 
     @property
     def LAND_SELL_PRICE(self) -> int:
-        # Default: 400
-        return remote_config_manager.get_value("LAND_SELL_PRICE", 400, int)
+        # Default: 1000
+        return remote_config_manager.get_value("LAND_SELL_PRICE", 1000, int)
     
     @property
     def H3_TILE_INDEX_RESOLUTION(self) -> int:
         # Default: 8 (from components/land.py)
         return remote_config_manager.get_value("H3_TILE_INDEX_RESOLUTION", 8, int)
 
-    LAND_INCOME_PER_DAY: int = 50
+    LAND_INCOME_PER_DAY: int = 40
     LAND_INCOME_ACCUMULATE: bool = False  # If True, income accumulates over days; if False, fixed daily amount
     
     # Payout configuration

@@ -144,7 +144,12 @@ class GameLogic:
                 modified_reward += bonus_value
         
         # Apply the user's level multiplier
-        final_reward = modified_reward * user.level
+        # New Formula: 1 + (Level - 1) * 0.25
+        # Level 1: 1.0x
+        # Level 2: 1.25x
+        # Level 5: 2.0x (Previously 5.0x)
+        level_multiplier = 1 + (user.level - 1) * 0.25
+        final_reward = modified_reward * level_multiplier
 
         return round(final_reward)
 

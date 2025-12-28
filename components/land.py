@@ -227,6 +227,13 @@ async def claim_land_income(current_user: User = Depends(get_current_verified_us
                 detail=f"Land income can only be claimed once every 24 hours. Next claim available at: {next_claim_time.isoformat()}"
             )
     
+    # Check if user has required access level (Bronze Key or higher)
+    if not await GameLogic.has_access_level(current_user, 'bronze'):
+        raise HTTPException(
+            status_code=403,
+            detail="You need an active Bronze Key (or higher) to claim Land Income."
+        )
+    
     # Get all user's land tiles
     user_tiles = await LandTile.find(LandTile.owner_id == current_user.id).to_list()
     

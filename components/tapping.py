@@ -13,7 +13,7 @@ from core.game_logic import GameLogic
 router = APIRouter(prefix="/api/tapping", tags=["Tapping System"])
 
 # --- Configuration ---
-DAILY_TAP_LIMIT = 200  # Maximum HC that can be earned per day from tapping
+DAILY_TAP_LIMIT = 150  # Maximum HC that can be earned per day from tapping
 TAP_RESET_HOUR = 0  # Hour when daily limit resets (24-hour format, UTC)
 
 # --- DTOs (Data Transfer Objects) ---

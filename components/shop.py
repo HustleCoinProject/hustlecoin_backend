@@ -51,31 +51,31 @@ The dictionary key is the unique 'item_id', which is used for lookups.
 SHOP_ITEMS_CONFIG = {
     # --- Spells (Boosters) ---
     "speed_hustle": {
-        "item_id": "speed_hustle", "name": "Speed Hustle", "price": 60,
+        "item_id": "speed_hustle", "name": "Speed Hustle", "price": 350,
         "description": "Completes all of your tasks 2x faster.",
         "item_type": "BOOSTER",
         "metadata": {"effect": "task_speed_multiplier", "value": 2, "duration_seconds": 7200} # 2 hours
     },
     "double_coins": {
-        "item_id": "double_coins", "name": "Double Coins", "price": 100,
+        "item_id": "double_coins", "name": "Double Coins", "price": 600,
         "description": "Doubles the HustleCoin (HC) you earn from tasks.",
         "item_type": "BOOSTER",
         "metadata": {"effect": "hc_multiplier", "value": 2, "duration_seconds": 3600} # 1 hour
     },
     "power_prestige": {
-        "item_id": "power_prestige", "name": "Power Prestige", "price": 200,
+        "item_id": "power_prestige", "name": "Power Prestige", "price": 500,
         "description": "Increases Rank Point gains by 50% to help you climb the leaderboards.",
         "item_type": "BOOSTER",
         "metadata": {"effect": "rank_point_multiplier", "value": 1.5, "duration_seconds": 86400} # 1 day
     },
     "hustler_brain": {
-        "item_id": "hustler_brain", "name": "Hustler Brain", "price": 90,
+        "item_id": "hustler_brain", "name": "Hustler Brain", "price": 400,
         "description": "Reduces the cooldown on your tasks by 50%.",
         "item_type": "BOOSTER",
         "metadata": {"effect": "cooldown_reduction_percentage", "value": 50, "duration_seconds": 14400} # 4 hours
     },
     "land_multiplier": {
-        "item_id": "land_multiplier", "name": "Land Multiplier", "price": 250,
+        "item_id": "land_multiplier", "name": "Land Multiplier", "price": 1200,
         "description": "Boosts your passive land income by 100%.",
         "item_type": "BOOSTER",
         "metadata": {"effect": "land_income_multiplier", "value": 2, "duration_seconds": 259200} # 3 days
@@ -89,17 +89,17 @@ SHOP_ITEMS_CONFIG = {
     # },
     # --- Bundles ---
     "combo_boost_pack": {
-        "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 300,
+        "item_id": "combo_boost_pack", "name": "Combo Boost Pack", "price": 1500,
         "description": "A high-value bundle containing Speed Hustle, Double Coins, and Power Prestige.",
         "item_type": "BUNDLE",
         "metadata": {"contains": ["speed_hustle", "double_coins", "power_prestige"]}
     },
     # --- Access Keys ---
     "bronze_key": {
-        "item_id": "bronze_key", "name": "Bronze Key", "price": 100,
-        "description": "Unlocks access to basic spells, land, and boosters.",
+        "item_id": "bronze_key", "name": "Bronze Key", "price": 600,
+        "description": "Unlocks access to land income, basic spells, and boosters.",
         "item_type": "ACCESS_KEY",
-        "metadata": {"effect": "access_level", "access_level": "bronze", "duration_seconds": 259200} # 3 days
+        "metadata": {"effect": "access_level", "access_level": "bronze", "duration_seconds": 604800} # 7 days
     },
     # "silver_key": {
     #     "item_id": "silver_key", "name": "Silver Key", "price": 250,
