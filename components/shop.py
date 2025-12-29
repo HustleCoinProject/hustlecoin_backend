@@ -13,25 +13,45 @@ from core.translations import translate_text, translate_dict_values
 
 def clean_and_update_inventory(current_inventory: List[InventoryItem], new_item: InventoryItem) -> List[InventoryItem]:
     """
-    Clean expired items and replace existing items of the same type.
+    Clean expired items and update inventory with new item.
+    If an active item of the same type exists, extend its expiry.
     Returns the cleaned and updated inventory list.
     """
     now = datetime.utcnow()
     cleaned_inventory = []
+    item_updated = False
     
-    # Filter out expired items and items of the same type as the new item
+    # Calculate duration of the new item being added
+    new_item_duration = timedelta(0)
+    if new_item.expires_at:
+        new_item_duration = new_item.expires_at - new_item.purchased_at
+
     for item in current_inventory:
         # Skip expired items (cleanup)
         if item.expires_at and item.expires_at <= now:
             continue
-        # Skip items of the same type (will be replaced by new item)
-        if item.item_id == new_item.item_id:
-            continue
-        # Keep all other items
-        cleaned_inventory.append(item)
+            
+        # Check if this is the same item type as the new one
+        if item.item_id == new_item.item_id and not item_updated:
+            # If the existing item has an expiry, extend it
+            if item.expires_at and new_item_duration > timedelta(0):
+                item.expires_at += new_item_duration
+            
+            # If existing item has no expiry (permanent), do nothing (or we could just keep it)
+            # If new item is permanent (no expiry), it might replace or just stay. 
+            # Assuming here we are dealing with extendable timed items.
+            
+            # Update quantity if needed? usually boosters are qty 1 active at a time 
+            # but we are just extending time here.
+            item_updated = True
+            cleaned_inventory.append(item)
+        else:
+            # Keep all other items
+            cleaned_inventory.append(item)
     
-    # Add the new item
-    cleaned_inventory.append(new_item)
+    # If we didn't update an existing item (because it didn't exist or was expired), add the new one
+    if not item_updated:
+        cleaned_inventory.append(new_item)
     
     return cleaned_inventory
 
