@@ -1,5 +1,6 @@
 # FastAPI-specific
 fastapi==0.119.0
+prometheus-fastapi-instrumentator==7.1.0
 uvicorn==0.38.0
 httptools==0.7.1
 watchfiles==1.1.1

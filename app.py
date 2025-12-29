@@ -9,6 +9,8 @@ from admin import admin_router
 from admin.registry import auto_register_models
 from admin.background_tasks import reset_all_rank_points
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from datetime import datetime, timedelta, date
 import asyncio
 from contextlib import asynccontextmanager
@@ -30,6 +32,9 @@ app = FastAPI(
     description="A clean, modular backend using FastAPI and Beanie ODM.",
     version="1.0.0"
 )
+
+# Instrument the app with Prometheus
+Instrumentator().instrument(app).expose(app)
 
 
 # Configuration: Methods that strictly require the client key
