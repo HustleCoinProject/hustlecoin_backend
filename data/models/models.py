@@ -95,9 +95,15 @@ class LandTile(Document):
     purchased_at: datetime = Field(default_factory=datetime.utcnow)
     purchase_price: int
     last_income_payout_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Geospatial data for efficient retrieval: { "type": "Point", "coordinates": [lng, lat] }
+    geo_location: Dict[str, Any] | None = None
 
     class Settings:
         name = "land_tiles"
+        indexes = [
+            [("geo_location", "2dsphere")]  # Native MongoDB Geospatial Index
+        ]
 
 
 # ===== PAYOUT MODEL =====

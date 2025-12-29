@@ -57,39 +57,32 @@ async def get_tiles_in_bbox(
                       example="-46.65,-23.58,-46.60,-23.52")
 ):
     """
-    Get all OWNED H3 tiles within a given bounding box.
-    This is used by the client to render the map view with only relevant tiles.
+    Get all OWNED H3 tiles within a given bounding box using efficient Geospatial Indexing.
     """
     try:
         min_lng, min_lat, max_lng, max_lat = map(float, bbox.split(','))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid bbox format.")
 
-    # Define the polygon for H3
-    geojson_polygon = {
-        "type": "Polygon",
-        "coordinates": [[
-            [min_lng, min_lat], [max_lng, min_lat],
-            [max_lng, max_lat], [min_lng, max_lat],
-            [min_lng, min_lat] 
-        ]]
-    }
+    # Safety: Prevent massive queries (DoS protection)
+    # Limit max view to approx 1.0 degree (~111km side) to allow larger area views
+    # Since we only fetch *owned* tiles, this is efficient even for large areas
+    if abs(max_lng - min_lng) > 1.0 or abs(max_lat - min_lat) > 1.0:
+        raise HTTPException(status_code=400, detail="Area too large. Please zoom in to view land.")
 
-    # Get all potential H3 indexes within the polygon at the defined resolution
-    h3_indexes = list(h3.geo_to_cells(geojson_polygon, settings.H3_TILE_INDEX_RESOLUTION))
+    # Use Native MongoDB Geospatial Query ($geoWithin with $box)
+    # This runs inside the database kernel and is extremely fast
+    owned_tiles = await LandTile.find({
+        "geo_location": {
+            "$geoWithin": {
+                "$box": [
+                    [min_lng, min_lat],  # Bottom Left
+                    [max_lng, max_lat]   # Top Right
+                ]
+            }
+        }
+    }).to_list()
 
-    if not h3_indexes:
-        return []
-
-    # Find which of these potential tiles are actually owned
-    owned_tiles = await LandTile.find(
-        In(LandTile.h3_index, h3_indexes)
-    ).to_list()
-
-    # --- FIX ---
-    # The original code returned all h3_indexes, with null for unowned tiles.
-    # The new code only returns the tiles that were found in the database (i.e., are owned).
-    # This creates a much smaller and more useful response.
     return [
         TileInfo(h3_index=tile.h3_index, owner_id=tile.owner_id)
         for tile in owned_tiles
@@ -112,6 +105,7 @@ async def buy_land_tile(
     current_user: User = Depends(get_current_verified_user)
 ):
     """Purchases a single land tile for the current user."""
+    # h3-py v4 validation
     if not h3.is_valid_cell(h3_index):
         raise HTTPException(status_code=400, detail="Invalid H3 tile index.")
 
@@ -149,12 +143,22 @@ async def buy_land_tile(
     
     # Create and save the new tile
     now = datetime.utcnow()
+    
+    # Calculate coordinates for geospatial indexing
+    # Calculate coordinates for geospatial indexing (h3-py v4)
+    lat, lng = h3.cell_to_latlng(h3_index)
+    
     new_tile = LandTile(
         h3_index=h3_index,
         owner_id=current_user.id,
         purchase_price=settings.LAND_PRICE,
         purchased_at=now,
-        last_income_payout_at=now
+        last_income_payout_at=now,
+        # GeoJSON Point: MongoDB uses [Long, Lat] order
+        geo_location={
+            "type": "Point",
+            "coordinates": [lng, lat]
+        }
     )
     
     try:
