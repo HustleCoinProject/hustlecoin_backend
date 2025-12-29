@@ -113,6 +113,17 @@ async def process_payout(
         if admin_notes:
             payout.admin_notes = admin_notes
         print(f"Payout approved and set to completed status")
+        
+        # Create notification for user
+        notification = Notification(
+            user_id=user.id,
+            title="Payout Approved!",
+            message=f"Your payout request for {payout.amount_hc} HC has been approved and processed.",
+            type="payout_status",
+            metadata={"payout_id": str(payout.id), "status": "completed"}
+        )
+        await notification.insert()
+        print(f"Notification created for user {user.id}")
     
     elif action == "reject":
         print(f"Rejecting payout: {payout_id}, returning {payout.amount_hc} HC to user {user.id}")
@@ -131,6 +142,17 @@ async def process_payout(
         # Refresh user to verify balance update
         updated_user = await User.get(user.id)
         print(f"Balance updated: {old_balance} -> {updated_user.hc_balance} (+{payout.amount_hc} HC)")
+        
+        # Create notification for user
+        notification = Notification(
+            user_id=user.id,
+            title="Payout Rejected",
+            message=f"Your payout request for {payout.amount_hc} HC was rejected. Reason: {payout.rejection_reason}. The amount has been returned to your balance.",
+            type="payout_status",
+            metadata={"payout_id": str(payout.id), "status": "rejected"}
+        )
+        await notification.insert()
+        print(f"Notification created for user {user.id}")
         
     else:
         print(f"Invalid action: {action}")
