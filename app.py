@@ -47,7 +47,8 @@ PUBLIC_PATHS = {
     "/redoc", 
     "/openapi.json", 
     "/health", 
-    "/health/ready"
+    "/health/ready",
+    "/metrics"
 }
 
 # Middleware to verify custom client key (stub)
