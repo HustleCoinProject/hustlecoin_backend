@@ -314,3 +314,40 @@ class GameLogic:
         final_points = modified_points * level_multiplier
 
         return round(final_points)
+
+    @staticmethod
+    async def get_event_point_increments(user: User, points: int) -> Dict[str, int]:
+        """
+        Returns a dictionary of event point updates for all active events the user has joined.
+        Used for MongoDB $inc updates.
+        
+        Args:
+            user: The User document.
+            points: The number of rank points earned.
+            
+        Returns:
+            Dict mapping "events_points.{event_id}" to points increment.
+        """
+        updates = {}
+        # Avoid circular import
+        from components.events import get_event_cycle_times
+        
+        now = datetime.utcnow()
+        
+        for event_id, joined_at in user.joined_events.items():
+            try:
+                # Check if event is currently active (user joined current cycle)
+                start, end = get_event_cycle_times(event_id)
+                
+                # We only award points if the current time is within the cycle
+                # And importantly, if the user joined BEFORE the current time (which is always true if in joined_events)
+                # But we should also check if the join time is within this CURRENT cycle or a previous one.
+                # If joined in previous cycle, they need to rejoin (logic depends on if we clear joined_events)
+                # PLAN: We will clear joined_events on reset. So if they are in there, they are in THIS cycle.
+                
+                if start <= now < end:
+                     updates[f"events_points.{event_id}"] = points
+            except Exception:
+                continue
+                
+        return updates

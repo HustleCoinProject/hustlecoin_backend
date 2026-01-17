@@ -21,7 +21,7 @@ class FirebaseService:
     def initialize(cls):
         """Initialize Firebase Admin SDK"""
         if cls._initialized:
-            print("⚠️  Firebase already initialized")
+            print("[WARN]  Firebase already initialized")
             return
             
         try:
@@ -35,7 +35,7 @@ class FirebaseService:
                 service_account_dict = json.loads(service_account_json)
                 cred = credentials.Certificate(service_account_dict)
                 firebase_admin.initialize_app(cred)
-                print("✅ Firebase initialized with base64-encoded credentials")
+                print("[SUCCESS] Firebase initialized with base64-encoded credentials")
                 print(f"   Project ID: {service_account_dict.get('project_id')}")
             else:
                 # Option 2: Check for file path (local development)
@@ -50,23 +50,23 @@ class FirebaseService:
                     with open(service_account_path, 'r') as f:
                         sa_data = json.load(f)
                         project_id = sa_data.get('project_id')
-                        print(f"✅ Firebase initialized with service account file")
+                        print(f"[SUCCESS] Firebase initialized with service account file")
                         print(f"   File: {service_account_path}")
                         print(f"   Project ID: {project_id}")
                 else:
                     # Option 3: Initialize with application default credentials (development)
                     # This works when you've run `firebase login` or set GOOGLE_APPLICATION_CREDENTIALS
                     firebase_admin.initialize_app()
-                    print("✅ Firebase initialized with default credentials")
+                    print("[SUCCESS] Firebase initialized with default credentials")
                 
             cls._initialized = True
-            print("✅ Firebase Admin SDK initialized successfully")
+            print("[SUCCESS] Firebase Admin SDK initialized successfully")
             
         except Exception as e:
-            print(f"❌ Firebase initialization failed: {e}")
+            print(f"[ERROR] Firebase initialization failed: {e}")
             import traceback
             traceback.print_exc()
-            print("⚠️  Firebase authentication will not be available")
+            print("[WARN]  Firebase authentication will not be available")
             # Don't raise exception - allow app to start without Firebase
     
     @classmethod
@@ -90,8 +90,8 @@ class FirebaseService:
             )
         
         try:
-            print(f"🔍 Attempting to verify Firebase token (length: {len(id_token)})")
-            print(f"🔍 Token preview: {id_token[:50]}...")
+            print(f"[INFO] Attempting to verify Firebase token (length: {len(id_token)})")
+            print(f"[INFO] Token preview: {id_token[:50]}...")
             
             # Use PyJWT to verify token with custom options
             # We verify signature and expiry, but skip issued-at time check to avoid clock skew issues
@@ -119,7 +119,7 @@ class FirebaseService:
                 }
             )
             
-            print(f"✅ Token verified successfully for user: {decoded_token.get('email')}")
+            print(f"[SUCCESS] Token verified successfully for user: {decoded_token.get('email')}")
             
             # Extract user information
             user_info = {
@@ -134,25 +134,25 @@ class FirebaseService:
             return user_info
             
         except auth.InvalidIdTokenError as e:
-            print(f"❌ InvalidIdTokenError: {str(e)}")
+            print(f"[ERROR] InvalidIdTokenError: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Firebase ID token"
             )
         except auth.ExpiredIdTokenError as e:
-            print(f"❌ ExpiredIdTokenError: {str(e)}")
+            print(f"[ERROR] ExpiredIdTokenError: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Firebase ID token has expired"
             )
         except ValueError as e:
-            print(f"❌ ValueError during token verification: {str(e)}")
+            print(f"[ERROR] ValueError during token verification: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid token format: {str(e)}"
             )
         except Exception as e:
-            print(f"❌ Unexpected error verifying Firebase token: {type(e).__name__}: {str(e)}")
+            print(f"[ERROR] Unexpected error verifying Firebase token: {type(e).__name__}: {str(e)}")
             import traceback
             traceback.print_exc()
             raise HTTPException(

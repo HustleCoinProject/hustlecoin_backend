@@ -55,3 +55,24 @@ async def seed_quiz_data(payload: QuizSeedPayload):
         "quizzes_added": added_count,
         "duplicates_skipped": skipped_count
     }
+
+class VerifyUserPayload(BaseModel):
+    email: str
+
+@router.post("/verify-user-email")
+async def verify_user_email(payload: VerifyUserPayload):
+    """
+    Manually verify a user's email for testing purposes.
+    """
+    from data.models import User
+    from fastapi import HTTPException
+    
+    user = await User.find_one(User.email == payload.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.is_email_verified = True
+    await user.save()
+    
+    return {"message": f"User {user.username} ({user.email}) email verified successfully."}
+

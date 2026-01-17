@@ -4,10 +4,11 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from core.database import init_db
 from core.rate_limiter_slowapi import setup_rate_limiting, check_redis_health
-from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock, notifications
+from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock, notifications, events
 from admin import admin_router
 from admin.registry import auto_register_models
 from admin.background_tasks import reset_all_rank_points
+from admin.event_tasks import check_event_resets
 
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -112,9 +113,9 @@ async def on_startup():
     print("Testing Redis connection...")
     redis_status = await check_redis_health()
     if redis_status:
-        print("✅ Redis connection successful - rate limiting active")
+        print("[SUCCESS] Redis connection successful - rate limiting active")
     else:
-        print("⚠️ Redis connection failed - rate limiting will use in-memory fallback")
+        print("[WARN] Redis connection failed - rate limiting will use in-memory fallback")
     
     # Register admin models
     print("Registering admin models...")
@@ -140,16 +141,30 @@ async def on_startup():
             max_instances=1  # Prevent concurrent executions in same instance
         )
         scheduler.start()
-        logger.info("✅ Scheduler started - Weekly rank reset scheduled for Mondays at 00:00 Angola time")
+        logger.info("[SUCCESS] Scheduler started - Weekly rank reset scheduled for Mondays at 00:00 Angola time")
     except Exception as e:
-        logger.error(f"⚠️ Failed to start scheduler: {e}")
+        logger.error(f"[WARN] Failed to start scheduler: {e}")
+
+    try:
+        # Schedule Event Resets: Check every hour at minute 5 (to avoid conflict with daily global resets if any)
+        scheduler.add_job(
+            check_event_resets,
+            trigger=CronTrigger(minute=5), 
+            id='check_event_resets',
+            name='Check for event completions and distribute rewards',
+            replace_existing=True,
+            max_instances=1
+        )
+        logger.info("[SUCCESS] Scheduler added - Event System Check")
+    except Exception as e:
+        logger.error(f"⚠️ Failed to add event scheduler: {e}")
     
     # Start background tasks
     print("Starting background tasks...")
     asyncio.create_task(redis_health_monitor())
     print("Background tasks started.")
     
-    print("🚀 HustleCoin Backend is ready for production!")
+    print("[SUCCESS] HustleCoin Backend is ready for production!")
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -177,6 +192,7 @@ app.include_router(tapping.router)
 app.include_router(payouts.router)
 app.include_router(safe_lock.router)
 app.include_router(notifications.router)
+app.include_router(events.router)
 
 # Add the dev router here
 app.include_router(dev.router)

@@ -67,6 +67,12 @@ class User(Document):
     is_firebase_user: bool = False  # True if user signed up via Firebase/Google
     is_email_verified: bool = False  # True if email is verified (auto-true for Firebase/Google OAuth)
     
+    # Events System
+    # Maps event_id -> datetime joined
+    joined_events: Dict[str, datetime] = Field(default_factory=dict)
+    # Maps event_id -> rank points earned in that event
+    events_points: Dict[str, int] = Field(default_factory=dict)
+
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

@@ -227,6 +227,11 @@ async def complete_task(
         update_inc[User.hc_earned_in_level] = final_reward
     if final_rank_points > 0:
         update_inc[User.rank_points] = final_rank_points
+        
+        # --- Events Integration ---
+        # Add points to all active joined events
+        event_updates = await GameLogic.get_event_point_increments(current_user, final_rank_points)
+        update_inc.update(event_updates)
     
     if update_inc or updates_to_set:
         if update_inc:

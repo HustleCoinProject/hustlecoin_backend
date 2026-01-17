@@ -139,7 +139,8 @@ async def process_tap_batch(
         Inc({
             User.hc_balance: final_hc_reward, 
             User.hc_earned_in_level: final_hc_reward,
-            User.rank_points: final_rank_points
+            User.rank_points: final_rank_points,
+            **await GameLogic.get_event_point_increments(current_user, final_rank_points)
         }),
         Set(updates_to_set)
     )
