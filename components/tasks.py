@@ -31,6 +31,12 @@ TASK_CONFIG = {
     "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 40, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
     "mini_game_played": {"reward": 10, "rank_points": 1, "cooldown_seconds": 30, "type": "INSTANT", "description": "Play a mini-game"},
+    
+    # Bundle Missions
+    "mission_1": {"reward": 200, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 1"},
+    "mission_2": {"reward": 250, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 2"},
+    "mission_3": {"reward": 300, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 3"},
+    "mission_4": {"reward": 350, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 4"},
 }
 
 
@@ -153,6 +159,9 @@ async def complete_task(
         base_reward_amount = config["reward"]
 
     elif task_id == "mini_game_played":
+        base_reward_amount = config["reward"]
+
+    elif task_id.startswith("mission_"):
         base_reward_amount = config["reward"]
 
     elif task_id == "quiz_game":
