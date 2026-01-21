@@ -2,7 +2,7 @@
 from typing import List, Dict
 from datetime import datetime, timedelta
 from beanie import PydanticObjectId
-from data.models.models import Payout, User, SystemSettings
+from data.models.models import Payout, User, SystemSettings, LeaderboardHistory
 from .crud import bulk_process_payouts
 import logging
 
@@ -95,6 +95,47 @@ async def reset_all_rank_points():
                     )
         else:
             logger.info("[RANK RESET] No users with rank_points > 0, skipping rewards")
+        
+        # STEP 1.5: Archive current leaderboard to history
+        try:
+            logger.info("[RANK RESET] Archiving current leaderboard...")
+            # Re-fetch strictly for history to ensure we get exactly what we want (e.g. top 100)
+            history_users = await User.find(
+                User.rank_points > 0
+            ).sort(-User.rank_points).limit(100).to_list()
+            
+            if history_users:
+                entries = [
+                    {
+                        "username": u.username,
+                        "rank_points": u.rank_points,
+                        "level": u.level,
+                        "current_hustle": u.current_hustle
+                    } for u in history_users
+                ]
+                
+                week_end = datetime.utcnow()
+                week_start = week_end - timedelta(days=7)
+                
+                await LeaderboardHistory(
+                    week_start=week_start,
+                    week_end=week_end,
+                    entries=entries
+                ).create()
+                logger.info(f"[RANK RESET] Archived {len(entries)} entries to history.")
+                
+                # Prune old history: Keep last 4 weeks
+                all_history = await LeaderboardHistory.find_all().sort(-LeaderboardHistory.week_end).to_list()
+                if len(all_history) > 4:
+                    to_delete = all_history[4:]
+                    for h in to_delete:
+                        await h.delete()
+                    logger.info(f"[RANK RESET] Pruned {len(to_delete)} old history entries.")
+            else:
+                logger.info("[RANK RESET] No entries to archive.")
+                
+        except Exception as e:
+            logger.error(f"[RANK RESET] Failed to archive history: {e}")
         
         # STEP 2: Execute the bulk reset operation
         logger.info("[RANK RESET] Starting bulk rank points reset for all users")

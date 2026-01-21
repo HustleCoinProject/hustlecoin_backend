@@ -751,3 +751,17 @@ def auto_register_models():
             exclude_fields=["revision_id", "_id", "__v"]
         )
     )
+
+    # Register LeaderboardHistory model
+    from data.models import LeaderboardHistory
+    AdminRegistry.register(
+        LeaderboardHistory,
+        AdminModelConfig(
+            LeaderboardHistory,
+            verbose_name="Leaderboard History",
+            verbose_name_plural="Leaderboard Histories",
+            list_display=["week_end", "created_at"],
+            readonly_fields=["id", "week_start", "week_end", "entries", "created_at"],
+            exclude_fields=["revision_id", "_id", "__v"]
+        )
+    )

@@ -190,3 +190,25 @@ class Notification(Document):
             [("user_id", 1), ("created_at", -1)], # frequent query: get user's notifications sorted by time
             [("user_id", 1), ("is_read", 1)]       # frequent query: get user's unread notifications
         ]
+
+# ===== LEADERBOARD HISTORY MODEL =====
+
+class LeaderboardHistory(Document):
+    """
+    Stores a snapshot of the weekly leaderboard before reset.
+    We keep the last 4 weeks.
+    """
+    week_start: datetime
+    week_end: datetime = Field(default_factory=datetime.utcnow)
+    # Storing a snapshot of the top users (e.g., top 100)
+    # List of dicts matching LeaderboardEntry structure: 
+    # { "username": str, "rank_points": int, "level": int, "current_hustle": str }
+    entries: List[Dict[str, Any]] = Field(default_factory=list)
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "leaderboard_history"
+        indexes = [
+            [("week_end", -1)]  # For querying latest history
+        ]
