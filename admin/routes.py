@@ -550,7 +550,7 @@ async def export_pending_payouts_csv(admin_user: AdminUser = Depends(get_current
     fieldnames = [
         'payout_id', 'user_id', 'username', 'amount_hc', 'amount_kwanza', 
         'payout_method', 'phone_number', 'full_name', 'national_id', 
-        'bank_iban', 'bank_name', 'created_at', 'action', 'admin_notes', 'rejection_reason'
+        'crypto_wallet_address', 'crypto_network', 'created_at', 'action', 'admin_notes', 'rejection_reason'
     ]
     
     writer = csv.DictWriter(output, fieldnames=fieldnames)

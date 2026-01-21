@@ -726,13 +726,13 @@ def auto_register_models():
             verbose_name_plural="Payouts",
             list_display=["user_id", "amount_kwanza", "payout_method", "status", "created_at"],
             list_filter=["status", "payout_method"],
-            search_fields=["phone_number", "full_name", "bank_name"],
+            search_fields=["phone_number", "full_name", "crypto_network"],
             ordering=["-created_at"],
             # CRITICAL: Financial data should be readonly - only status and admin fields can be edited
             readonly_fields=[
                 "id", "created_at", "updated_at", "user_id", "amount_hc", 
                 "amount_kwanza", "conversion_rate", "payout_method",
-                "phone_number", "full_name", "national_id", "bank_iban", "bank_name"
+                "phone_number", "full_name", "national_id", "crypto_wallet_address", "crypto_network"
             ],
             exclude_fields=["revision_id", "_id", "__v"]
         )

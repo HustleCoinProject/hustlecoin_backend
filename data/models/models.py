@@ -59,9 +59,9 @@ class User(Document):
     full_name: str | None = None  # Full name for transfers
     national_id: str | None = None  # National ID for verification
     
-    # Bank transfer information
-    bank_iban: str | None = None  # IBAN for bank transfers
-    bank_name: str | None = None  # Bank name
+    # Crypto transfer information
+    crypto_wallet_address: str | None = None  # Wallet address for crypto transfers
+    crypto_network: str | None = None  # Network (e.g. Base, TRC20)
     
     # Firebase authentication tracking
     is_firebase_user: bool = False  # True if user signed up via Firebase/Google
@@ -128,9 +128,9 @@ class Payout(Document):
     full_name: str | None = None
     national_id: str | None = None
     
-    # Bank transfer fields
-    bank_iban: str | None = None
-    bank_name: str | None = None
+    # Crypto transfer fields
+    crypto_wallet_address: str | None = None
+    crypto_network: str | None = None
     
     # Status: "pending" | "completed" | "rejected"
     status: Annotated[str, IndexedField()] = "pending"

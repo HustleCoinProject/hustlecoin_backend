@@ -144,7 +144,7 @@
                                             {% if payout.payout_method == "multicaixa_express" %}
                                                 Multicaixa
                                             {% else %}
-                                                Bank Transfer
+                                                Crypto Transfer
                                             {% endif %}
                                         </span>
                                     </td>
@@ -154,8 +154,8 @@
                                             <strong>Name:</strong> {{ payout.full_name }}<br>
                                             <strong>ID:</strong> {{ payout.national_id }}
                                         {% else %}
-                                            <strong>IBAN:</strong> {{ payout.bank_iban }}<br>
-                                            <strong>Bank:</strong> {{ payout.bank_name }}
+                                            <strong>Wallet:</strong> {{ payout.crypto_wallet_address }}<br>
+                                            <strong>Network:</strong> {{ payout.crypto_network }}
                                         {% endif %}
                                     </td>
                                     <td>

@@ -40,8 +40,9 @@ class PayoutOut(BaseModel):
     phone_number: str | None = None
     full_name: str | None = None
     national_id: str | None = None
-    bank_iban: str | None = None
-    bank_name: str | None = None
+
+    crypto_wallet_address: str | None = None
+    crypto_network: str | None = None
 
 
 class UserPayoutInfoUpdate(BaseModel):
@@ -49,8 +50,9 @@ class UserPayoutInfoUpdate(BaseModel):
     phone_number: str | None = Field(None, min_length=9, max_length=20)
     full_name: str | None = Field(None, min_length=2, max_length=100)
     national_id: str | None = Field(None, min_length=5, max_length=50)
-    bank_iban: str | None = Field(None, min_length=15, max_length=34)
-    bank_name: str | None = Field(None, min_length=2, max_length=100)
+
+    crypto_wallet_address: str | None = Field(None, min_length=10, max_length=100)
+    crypto_network: str | None = Field(None, min_length=2, max_length=50)
 
     @validator('phone_number')
     def validate_phone(cls, v):
@@ -62,30 +64,29 @@ class UserPayoutInfoUpdate(BaseModel):
             raise ValueError('Phone number must have at least 9 digits')
         return phone
 
-    @validator('bank_iban')
-    def validate_iban(cls, v):
+    @validator('crypto_wallet_address')
+    def validate_wallet(cls, v):
         if v is None:
             return v
-        # Basic IBAN validation - remove spaces and check format
-        iban = v.replace(' ', '').upper()
-        if len(iban) < 15 or len(iban) > 34:
-            raise ValueError('IBAN must be between 15 and 34 characters')
-        return iban
+        # Basic wallet validation
+        if len(v) < 10 or len(v) > 100:
+            raise ValueError('Wallet address must be between 10 and 100 characters')
+        return v
 
 
 class PayoutRequest(BaseModel):
     """Request for creating a new payout."""
     amount_hc: int = Field(..., gt=0)
-    payout_method: str = Field(..., pattern="^(multicaixa_express|bank_transfer)$")
+    payout_method: str = Field(..., pattern="^(multicaixa_express|crypto_transfer)$")
     
     # Multicaixa Express fields (required if method is multicaixa_express)
     phone_number: str | None = None
     full_name: str | None = None
     national_id: str | None = None
     
-    # Bank transfer fields (required if method is bank_transfer)
-    bank_iban: str | None = None
-    bank_name: str | None = None
+    # Crypto transfer fields (required if method is crypto_transfer)
+    crypto_wallet_address: str | None = None
+    crypto_network: str | None = "Base"  # Default to Base as per requirements
 
     @validator('amount_hc')
     def validate_amount(cls, v):
@@ -100,9 +101,12 @@ class PayoutRequest(BaseModel):
         if self.payout_method == "multicaixa_express":
             if not all([self.phone_number, self.full_name, self.national_id]):
                 raise ValueError("Phone number, full name, and national ID are required for Multicaixa Express")
-        elif self.payout_method == "bank_transfer":
-            if not all([self.bank_iban, self.bank_name]):
-                raise ValueError("Bank IBAN and bank name are required for bank transfer")
+        elif self.payout_method == "crypto_transfer":
+            if not self.crypto_wallet_address:
+                raise ValueError("Wallet address is required for crypto transfer")
+            # Network defaults to "Base" if not provided, but we ensure it's set
+            if not self.crypto_network:
+                self.crypto_network = "Base"
 
 
 class UserPayoutInfo(BaseModel):
@@ -110,8 +114,9 @@ class UserPayoutInfo(BaseModel):
     phone_number: str | None = None
     full_name: str | None = None
     national_id: str | None = None
-    bank_iban: str | None = None
-    bank_name: str | None = None
+
+    crypto_wallet_address: str | None = None
+    crypto_network: str | None = None
     
     # Calculated fields
     available_balance_hc: int
@@ -154,10 +159,10 @@ def get_payout_methods() -> List[PayoutMethodInfo]:
             min_amount_kwanza=min_kwanza
         ),
         PayoutMethodInfo(
-            method="bank_transfer",
-            name="Bank Transfer",
-            description="Transfer to your bank account using IBAN",
-            required_fields=["bank_iban", "bank_name"],
+            method="crypto_transfer",
+            name="Crypto Transfer (HC)",
+            description="Transfer HustleCoin to your wallet on Base network",
+            required_fields=["crypto_wallet_address"],
             min_amount_kwanza=min_kwanza
         )
     ]
@@ -178,8 +183,7 @@ async def get_user_payout_info(current_user: User = Depends(get_current_verified
         phone_number=current_user.phone_number,
         full_name=current_user.full_name,
         national_id=current_user.national_id,
-        bank_iban=current_user.bank_iban,
-        bank_name=current_user.bank_name,
+
         available_balance_hc=current_user.hc_balance,
         available_balance_kwanza=calculate_kwanza_amount(current_user.hc_balance),
         min_payout_hc=settings.MINIMUM_PAYOUT_HC,
@@ -206,11 +210,11 @@ async def update_payout_info(
     if payout_info.national_id is not None:
         update_fields["national_id"] = payout_info.national_id
     
-    if payout_info.bank_iban is not None:
-        update_fields["bank_iban"] = payout_info.bank_iban
+    if payout_info.crypto_wallet_address is not None:
+        update_fields["crypto_wallet_address"] = payout_info.crypto_wallet_address
     
-    if payout_info.bank_name is not None:
-        update_fields["bank_name"] = payout_info.bank_name
+    if payout_info.crypto_network is not None:
+        update_fields["crypto_network"] = payout_info.crypto_network
     
     # Update user if there are changes
     if update_fields:
@@ -223,8 +227,7 @@ async def update_payout_info(
         phone_number=current_user.phone_number,
         full_name=current_user.full_name,
         national_id=current_user.national_id,
-        bank_iban=current_user.bank_iban,
-        bank_name=current_user.bank_name,
+
         available_balance_hc=current_user.hc_balance,
         available_balance_kwanza=calculate_kwanza_amount(current_user.hc_balance),
         min_payout_hc=settings.MINIMUM_PAYOUT_HC,
@@ -301,8 +304,9 @@ async def request_payout(
         phone_number=payout_request.phone_number,
         full_name=payout_request.full_name,
         national_id=payout_request.national_id,
-        bank_iban=payout_request.bank_iban,
-        bank_name=payout_request.bank_name,
+
+        crypto_wallet_address=payout_request.crypto_wallet_address,
+        crypto_network=payout_request.crypto_network if payout_request.crypto_network else "Base",
         status="pending"
     )
     
@@ -321,8 +325,7 @@ async def request_payout(
         phone_number=payout.phone_number,
         full_name=payout.full_name,
         national_id=payout.national_id,
-        bank_iban=payout.bank_iban,
-        bank_name=payout.bank_name
+
     )
 
 
@@ -350,8 +353,8 @@ async def get_payout_history(
             phone_number=payout.phone_number,
             full_name=payout.full_name,
             national_id=payout.national_id,
-            bank_iban=payout.bank_iban,
-            bank_name=payout.bank_name
+            crypto_wallet_address=payout.crypto_wallet_address,
+            crypto_network=payout.crypto_network
         )
         for payout in payouts
     ]
@@ -384,8 +387,8 @@ async def get_payout_details(
         phone_number=payout.phone_number,
         full_name=payout.full_name,
         national_id=payout.national_id,
-        bank_iban=payout.bank_iban,
-        bank_name=payout.bank_name
+        crypto_wallet_address=payout.crypto_wallet_address,
+        crypto_network=payout.crypto_network
     )
 
 

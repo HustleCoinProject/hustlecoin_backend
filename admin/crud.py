@@ -209,8 +209,8 @@ async def get_pending_payouts_for_csv() -> List[Dict[str, Any]]:
             "phone_number": payout.phone_number or "",
             "full_name": payout.full_name or "",
             "national_id": payout.national_id or "",
-            "bank_iban": payout.bank_iban or "",
-            "bank_name": payout.bank_name or "",
+            "crypto_wallet_address": payout.crypto_wallet_address or "",
+            "crypto_network": payout.crypto_network or "",
             "created_at": payout.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             "action": "",  # To be filled by admin
             "admin_notes": "",

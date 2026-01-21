@@ -50,8 +50,8 @@ class PayoutCSVExportRow(BaseModel):
     phone_number: str = ""
     full_name: str = ""
     national_id: str = ""
-    bank_iban: str = ""
-    bank_name: str = ""
+    crypto_wallet_address: str = ""
+    crypto_network: str = ""
     created_at: str
     # Fields for admin decision
     action: str = ""  # "approve" or "reject" - to be filled by admin
