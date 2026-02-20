@@ -25,6 +25,25 @@ class InventoryItem(BaseModel):
     expires_at: datetime | None = None # For timed boosters
 
 
+class RewardItem(BaseModel):
+    """Represents a standard reward (HC, Item, etc) across the app."""
+    reward_type: str  # "HC", "ITEM"
+    hc_amount: int | None = None
+    item_id: str | None = None
+    item_name: str | None = None
+    item_description: str | None = None
+    quantity: int = 1
+
+
+class PendingReward(BaseModel):
+    """Represents a reward waiting to be claimed by the user."""
+    id: str = Field(default_factory=lambda: str(PydanticObjectId()))
+    source: str  # "Leaderboard", "Event Winner", etc.
+    reward: RewardItem
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+
 class User(Document):
     username: Annotated[str, IndexedField(unique=True)] = Field(..., min_length=3, max_length=30)
     email: Annotated[EmailStr, IndexedField(unique=True)] = Field(..., max_length=254)
@@ -72,6 +91,9 @@ class User(Document):
     joined_events: Dict[str, datetime] = Field(default_factory=dict)
     # Maps event_id -> rank points earned in that event
     events_points: Dict[str, int] = Field(default_factory=dict)
+    
+    # Standard Rewards System
+    pending_rewards: List[PendingReward] = Field(default_factory=list)
 
     createdAt: datetime = Field(default_factory=datetime.utcnow)
 

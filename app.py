@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from core.database import init_db
 from core.rate_limiter_slowapi import setup_rate_limiting, check_redis_health
-from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock, notifications, events
+from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock, notifications, events, rewards
 from admin import admin_router
 from admin.registry import auto_register_models
 from admin.background_tasks import check_weekly_rank_reset
@@ -189,6 +189,7 @@ app.include_router(payouts.router)
 app.include_router(safe_lock.router)
 app.include_router(notifications.router)
 app.include_router(events.router)
+app.include_router(rewards.router)
 
 # Add the dev router here
 app.include_router(dev.router)

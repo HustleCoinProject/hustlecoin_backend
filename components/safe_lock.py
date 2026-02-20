@@ -49,21 +49,14 @@ class SafeLockDepositResponse(BaseModel):
     safe_lock_amount: int
     locked_until: datetime
 
-class SafeLockReward(BaseModel):
-    """Represents a reward item from safe lock claim."""
-    reward_type: str  # "HC", "ITEM"
-    item_id: Optional[str] = None
-    item_name: Optional[str] = None
-    item_description: Optional[str] = None
-    hc_amount: Optional[int] = None
-    quantity: int = 1
+from data.models import RewardItem
 
 class SafeLockClaimResponse(BaseModel):
     """Response for safe lock claim endpoint."""
     success: bool
     message: str
     returned_amount: int
-    reward: SafeLockReward
+    reward: RewardItem
     new_balance: int
     new_safe_lock_amount: int
 
@@ -135,13 +128,13 @@ async def get_total_safe_lock_amount() -> int:
     return stats.total_safe_lock_amount
 
 
-async def calculate_safe_lock_reward(user: User) -> SafeLockReward:
+async def calculate_safe_lock_reward(user: User) -> RewardItem:
     """
     Calculate reward based on user's rank points and safe lock amount relative to all other users.
     Ensures minimum 30 HC reward if calculation yields less.
     Uses cached aggregated statistics for memory-efficient performance.
     
-    Returns a SafeLockReward with either HC or an item from shop.
+    Returns a RewardItem with either HC or an item from shop.
     """
     # Get aggregated statistics (cached, memory-efficient)
     stats = await safe_lock_global_cache.get_or_fetch(_fetch_aggregate_stats)
@@ -193,7 +186,7 @@ async def calculate_safe_lock_reward(user: User) -> SafeLockReward:
         
         selected_item = random.choice(weighted_pool)
         
-        return SafeLockReward(
+        return RewardItem(
             reward_type="ITEM",
             item_id=selected_item["item_id"],
             item_name=selected_item["name"],
@@ -202,7 +195,7 @@ async def calculate_safe_lock_reward(user: User) -> SafeLockReward:
         )
     else:
         # Return HC reward
-        return SafeLockReward(
+        return RewardItem(
             reward_type="HC",
             hc_amount=total_hc_reward
         )

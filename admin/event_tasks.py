@@ -4,7 +4,7 @@ import logging
 from beanie import PydanticObjectId
 from data.models import User, SystemSettings
 from components.events import EVENTS_CONFIG, get_event_cycle_times
-from beanie.operators import Inc, Set, Unset
+from beanie.operators import Inc, Set, Unset, Push
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,8 @@ async def _process_event_reset(event_id: str, cycle_end_date: datetime, reset_ke
         
         rewards_log = []
         
+        from data.models import PendingReward, RewardItem
+        
         # 3. Distribute Rewards from Pool
         for rank, user in enumerate(winners, start=1):
             if total_pool > 0:
@@ -103,9 +105,21 @@ async def _process_event_reset(event_id: str, cycle_end_date: datetime, reset_ke
                 reward_amount = 0
             
             if reward_amount > 0:
-                await user.update(Inc({User.hc_balance: reward_amount, User.hc_earned_in_level: reward_amount}))
-                rewards_log.append(f"Rank {rank}: {user.username} (+ {reward_amount} HC)")
-                logger.info(f"[EVENTS] Rewarded {user.username} {reward_amount} HC for {event_id} Rank {rank}")
+                # Create pending reward instead of directly adding balance
+                pending_reward = PendingReward(
+                    source=f"Event Winner: {event_id}",
+                    reward=RewardItem(
+                        reward_type="HC",
+                        hc_amount=reward_amount
+                    )
+                )
+                
+                await user.update(
+                    Push({User.pending_rewards: pending_reward.dict()}),
+                    Inc({User.hc_earned_in_level: reward_amount}) # Still track earned in level, though technically it's pending
+                )
+                rewards_log.append(f"Rank {rank}: {user.username} (Pending: {reward_amount} HC)")
+                logger.info(f"[EVENTS] Queued reward for {user.username}: {reward_amount} HC for {event_id} Rank {rank}")
         
         logger.info(f"[EVENTS] {event_id} - Participants: {total_participants}, Pool: {total_pool} HC (1/3 of {total_participants * entry_fee} HC), 2/3 burned")
 

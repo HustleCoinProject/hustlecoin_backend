@@ -3,7 +3,7 @@ from typing import List, Dict
 from datetime import datetime, timedelta
 from beanie import PydanticObjectId
 from data.models.models import Payout, User, SystemSettings, LeaderboardHistory
-from .crud import bulk_process_payouts
+from beanie.operators import Push
 import logging
 
 logger = logging.getLogger(__name__)
@@ -80,18 +80,29 @@ async def reset_all_rank_points():
         ).sort(-User.rank_points).limit(3).to_list()
         
         if top_users:
+            from data.models import PendingReward, RewardItem
+            
             # Reward: Half of rank_points as HC (integer division)
             for rank, user in enumerate(top_users, start=1):
                 if user.rank_points > 0:
                     reward_hc = user.rank_points // 2  # Integer division for half
                     
-                    # Award HC to the user
-                    user.hc_balance += reward_hc
-                    await user.save()
+                    # Instead of direct award, queue a pending reward
+                    pending_reward = PendingReward(
+                        source="Weekly Leaderboard",
+                        reward=RewardItem(
+                            reward_type="HC",
+                            hc_amount=reward_hc
+                        )
+                    )
+                    
+                    await user.update(
+                        Push({User.pending_rewards: pending_reward.dict()})
+                    )
                     
                     logger.info(
                         f"[RANK RESET] Rank #{rank}: {user.username} "
-                        f"(rank_points: {user.rank_points}) rewarded {reward_hc} HC"
+                        f"(rank_points: {user.rank_points}) queued {reward_hc} HC reward"
                     )
         else:
             logger.info("[RANK RESET] No users with rank_points > 0, skipping rewards")
