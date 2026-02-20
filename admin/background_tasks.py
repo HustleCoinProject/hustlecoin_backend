@@ -168,3 +168,55 @@ async def reset_all_rank_points():
                 logger.info("[RANK RESET] Released MongoDB lock")
             except Exception as e:
                 logger.warning(f"[RANK RESET] Failed to release MongoDB lock: {e}")
+
+async def check_weekly_rank_reset():
+    """
+    Checks if we have passed a new Monday 00:00:00 (Angola Time) since the last run.
+    If so, it triggers the reset_all_rank_points() function.
+    This makes the reset resilient to server restarts or downtime.
+    """
+    import pytz
+    
+    lock_key = "rank_reset_lock"
+    angola_tz = pytz.timezone('Africa/Luanda')
+    
+    try:
+        # Get the current time in Angola timezone
+        now_utc = datetime.utcnow()
+        now_angola = now_utc.replace(tzinfo=pytz.utc).astimezone(angola_tz)
+        
+        # Get the last execution time
+        setting = await SystemSettings.find_one({"setting_key": lock_key})
+        
+        last_executed_at_utc = None
+        if setting and setting.last_executed_at:
+            last_executed_at_utc = setting.last_executed_at
+            
+        if not last_executed_at_utc:
+            # If it has never run, run it now to establish a baseline
+            logger.info("[RANK RESET CHECK] Never run before. Running now.")
+            await reset_all_rank_points()
+            return
+            
+        last_executed_angola = last_executed_at_utc.replace(tzinfo=pytz.utc).astimezone(angola_tz)
+        
+        # Find the most recent target reset time (most recent Monday at 00:00)
+        # Determine how many days ago was Monday (0 = Monday, 1 = Tuesday, etc.)
+        days_since_monday = now_angola.weekday()
+        
+        # Go back that many days to get the most recent Monday
+        most_recent_monday_date = (now_angola - timedelta(days=days_since_monday)).date()
+        
+        # Combine with 00:00 time to get the exact target time
+        most_recent_reset_target = angola_tz.localize(datetime.combine(most_recent_monday_date, datetime.min.time()))
+        
+        # If the last time it ran was BEFORE the most recent reset target, we missed a execution
+        if last_executed_angola < most_recent_reset_target:
+            logger.info(f"[RANK RESET CHECK] Missed a reset event. Last run: {last_executed_angola}. Target: {most_recent_reset_target}. Running now.")
+            await reset_all_rank_points()
+        else:
+            logger.debug(f"[RANK RESET CHECK] Up to date. Last run: {last_executed_angola}")
+            
+    except Exception as e:
+        logger.error(f"[RANK RESET CHECK] Error checking weekly reset: {e}", exc_info=True)
+

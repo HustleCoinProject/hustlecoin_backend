@@ -20,7 +20,7 @@ from .crud import (get_pending_payouts, process_payout,
                    get_payout_statistics, get_pending_payouts_for_csv, bulk_process_payouts)
 from core.config import JWT_SECRET_KEY, JWT_ALGORITHM
 from data.models.models import Payout
-from .background_tasks import process_payouts_background
+from .background_tasks import process_payouts_background, reset_all_rank_points
 
 router = APIRouter(prefix="/admin", tags=["Admin Panel"])
 
@@ -100,13 +100,19 @@ async def admin_dashboard(request: Request, admin_user: AdminUser = Depends(get_
                 "verbose_name": AdminRegistry.get_verbose_name(model_name),
                 "error": str(e)
             })
+            
+    # Handle success/error feedback
+    success_msg = request.query_params.get("success_msg")
+    error_msg = request.query_params.get("error_msg")
     
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "admin_user": admin_user,
         "total_collections": total_collections,
         "collections_info": collections_info,
-        "collections": AdminRegistry.get_registered_models()
+        "collections": AdminRegistry.get_registered_models(),
+        "success_msg": success_msg,
+        "error_msg": error_msg
     })
 
 
@@ -162,6 +168,10 @@ async def admin_logout():
     response = RedirectResponse(url="/admin/login", status_code=status.HTTP_302_FOUND)
     response.delete_cookie("admin_token")
     return response
+
+
+
+
 
 
 @router.get("/collection/{model_name}", response_class=HTMLResponse)

@@ -7,7 +7,7 @@ from core.rate_limiter_slowapi import setup_rate_limiting, check_redis_health
 from components import users, tasks, leaderboard, hustles, shop, land, dev, tapping, payouts, safe_lock, notifications, events
 from admin import admin_router
 from admin.registry import auto_register_models
-from admin.background_tasks import reset_all_rank_points
+from admin.background_tasks import check_weekly_rank_reset
 from admin.event_tasks import check_event_resets
 
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -125,23 +125,19 @@ async def on_startup():
     # Setup scheduled tasks
     print("Setting up scheduled tasks...")
     try:
-        # Schedule weekly rank reset: Every Monday at midnight Angola time (WAT = UTC+1)
-        angola_tz = pytz.timezone('Africa/Luanda')
+        # Schedule weekly rank reset CHECK instead of the hard cron: Every hour at minute 0
         scheduler.add_job(
-            reset_all_rank_points,
+            check_weekly_rank_reset,
             trigger=CronTrigger(
-                day_of_week='mon',  # Monday
-                hour=0,             # Midnight
-                minute=0,           # 00:00
-                timezone=angola_tz
+                minute=0
             ),
-            id='weekly_rank_reset',
-            name='Reset all user rank points to 0',
+            id='check_weekly_rank_reset',
+            name='Check if weekly rank points reset is needed',
             replace_existing=True,
             max_instances=1  # Prevent concurrent executions in same instance
         )
         scheduler.start()
-        logger.info("[SUCCESS] Scheduler started - Weekly rank reset scheduled for Mondays at 00:00 Angola time")
+        logger.info("[SUCCESS] Scheduler started - Weekly rank reset check scheduled for every hour")
     except Exception as e:
         logger.error(f"[WARN] Failed to start scheduler: {e}")
 
