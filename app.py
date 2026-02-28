@@ -212,8 +212,8 @@ async def get_system_info():
     from core.config import settings
     return {
         "payout_conversion_rate": settings.PAYOUT_CONVERSION_RATE,
-        "minimum_payout_hc": settings.MINIMUM_PAYOUT_HC,
-        "minimum_payout_kwanza": round(settings.MINIMUM_PAYOUT_HC / settings.PAYOUT_CONVERSION_RATE, 2),
+        "minimum_payout_hp": settings.MINIMUM_PAYOUT_HP,
+        "minimum_payout_kwanza": round(settings.MINIMUM_PAYOUT_HP / settings.PAYOUT_CONVERSION_RATE, 2),
         "land_price": settings.LAND_PRICE,
         "land_income_per_day": settings.LAND_INCOME_PER_DAY
     }

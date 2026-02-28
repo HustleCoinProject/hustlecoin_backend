@@ -19,7 +19,7 @@ class ClaimRewardResponse(BaseModel):
     success: bool
     message: str
     reward_type: str
-    hc_amount: Optional[int] = None
+    hp_amount: Optional[int] = None
     item_id: Optional[str] = None
     item_name: Optional[str] = None
     new_hc_balance: int
@@ -44,7 +44,7 @@ async def claim_pending_reward(
 ):
     """
     Claim a specific pending reward by its ID.
-    If it's HC, adds to balance. If it's an ITEM, adds to inventory.
+    If it's HP, adds to balance. If it's an ITEM, adds to inventory.
     """
     # Find the target reward
     target_reward = next((r for r in current_user.pending_rewards if r.id == reward_id), None)
@@ -58,13 +58,13 @@ async def claim_pending_reward(
     reward_item = target_reward.reward
     
     # Apply the reward
-    if reward_item.reward_type == "HC" and reward_item.hc_amount:
-        # Atomic update to remove reward and add HC
+    if reward_item.reward_type == "HP" and reward_item.hp_amount:
+        # Atomic update to remove reward and add HP
         update_result = await User.find_one(
             And(User.id == current_user.id, {"pending_rewards.id": reward_id})
         ).update(
             Pull({User.pending_rewards: {"id": reward_id}}),
-            Inc({User.hc_balance: reward_item.hc_amount})
+            Inc({User.hp_score: reward_item.hp_amount})
         )
         
         if not update_result:
@@ -74,10 +74,10 @@ async def claim_pending_reward(
         
         return ClaimRewardResponse(
             success=True,
-            message=f"Successfully claimed {reward_item.hc_amount} HC from {target_reward.source}",
-            reward_type="HC",
-            hc_amount=reward_item.hc_amount,
-            new_hc_balance=current_user.hc_balance
+            message=f"Successfully claimed {reward_item.hp_amount} HP from {target_reward.source}",
+            reward_type="HP",
+            hp_amount=reward_item.hp_amount,
+            new_hc_balance=current_user.hp_score
         )
         
     elif reward_item.reward_type == "ITEM" and reward_item.item_id:
@@ -120,7 +120,7 @@ async def claim_pending_reward(
             reward_type="ITEM",
             item_id=reward_item.item_id,
             item_name=reward_item.item_name,
-            new_hc_balance=current_user.hc_balance
+            new_hc_balance=current_user.hp_score
         )
         
     else:

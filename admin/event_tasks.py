@@ -109,19 +109,19 @@ async def _process_event_reset(event_id: str, cycle_end_date: datetime, reset_ke
                 pending_reward = PendingReward(
                     source=f"Event Winner: {event_id}",
                     reward=RewardItem(
-                        reward_type="HC",
-                        hc_amount=reward_amount
+                        reward_type="HP",
+                        hp_amount=reward_amount
                     )
                 )
                 
                 await user.update(
                     Push({User.pending_rewards: pending_reward.dict()}),
-                    Inc({User.hc_earned_in_level: reward_amount}) # Still track earned in level, though technically it's pending
+                    Inc({User.hp_earned_in_level: reward_amount}) # Still track earned in level, though technically it's pending
                 )
-                rewards_log.append(f"Rank {rank}: {user.username} (Pending: {reward_amount} HC)")
-                logger.info(f"[EVENTS] Queued reward for {user.username}: {reward_amount} HC for {event_id} Rank {rank}")
+                rewards_log.append(f"Rank {rank}: {user.username} (Pending: {reward_amount} HP)")
+                logger.info(f"[EVENTS] Queued reward for {user.username}: {reward_amount} HP for {event_id} Rank {rank}")
         
-        logger.info(f"[EVENTS] {event_id} - Participants: {total_participants}, Pool: {total_pool} HC (1/3 of {total_participants * entry_fee} HC), 2/3 burned")
+        logger.info(f"[EVENTS] {event_id} - Participants: {total_participants}, Pool: {total_pool} HP (1/3 of {total_participants * entry_fee} HP), 2/3 burned")
 
         # 4. Reset Event Data for ALL Users
         # We remove the joined status and the points for this event

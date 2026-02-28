@@ -27,7 +27,7 @@
                 <thead>
                     <tr>
                         {% for field_name, field_info in field_info.items() %}
-                        {% if not field_info.is_hidden and field_name in ['id', 'username', 'email', 'hc_balance', 'level', 'current_hustle', 'question_en', 'correctAnswerIndex', 'isActive', 'h3_index', 'owner_id', 'purchase_price', 'purchased_at', 'is_superuser', 'is_active', 'created_at'] %}
+                        {% if not field_info.is_hidden and field_name in ['id', 'username', 'email', 'hp_score', 'level', 'current_hustle', 'question_en', 'correctAnswerIndex', 'isActive', 'h3_index', 'owner_id', 'purchase_price', 'purchased_at', 'is_superuser', 'is_active', 'created_at'] %}
                         <th>{{ field_info.verbose_name }}</th>
                         {% endif %}
                         {% endfor %}
@@ -38,7 +38,7 @@
                     {% for document in documents %}
                     <tr>
                         {% for field_name, field_info in field_info.items() %}
-                        {% if not field_info.is_hidden and field_name in ['id', 'username', 'email', 'hc_balance', 'level', 'current_hustle', 'question_en', 'correctAnswerIndex', 'isActive', 'h3_index', 'owner_id', 'purchase_price', 'purchased_at', 'is_superuser', 'is_active', 'created_at'] %}
+                        {% if not field_info.is_hidden and field_name in ['id', 'username', 'email', 'hp_score', 'level', 'current_hustle', 'question_en', 'correctAnswerIndex', 'isActive', 'h3_index', 'owner_id', 'purchase_price', 'purchased_at', 'is_superuser', 'is_active', 'created_at'] %}
                         <td>
                             {% set value = document.get(field_name, '') %}
                             {% if field_info.field_type.__name__ == 'bool' %}
@@ -51,7 +51,7 @@
                                 {% if value %}
                                 {{ value.strftime('%Y-%m-%d %H:%M') if value.strftime else value }}
                                 {% endif %}
-                            {% elif field_info.field_type.__name__ == 'int' and field_name == 'hc_balance' %}
+                            {% elif field_info.field_type.__name__ == 'int' and field_name == 'hp_score' %}
                                 <span class="badge bg-warning text-dark">{{ value }}</span>
                             {% else %}
                                 {{ value }}

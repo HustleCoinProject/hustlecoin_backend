@@ -78,9 +78,9 @@ SHOP_ITEMS_CONFIG = {
     },
     "double_coins": {
         "item_id": "double_coins", "name": "Double Coins", "price": 600,
-        "description": "Doubles the HustleCoin (HC) you earn from tasks.",
+        "description": "Doubles the HustleCoin (HP) you earn from tasks.",
         "item_type": "BOOSTER",
-        "metadata": {"effect": "hc_multiplier", "value": 2, "duration_seconds": 3600} # 1 hour
+        "metadata": {"effect": "hp_multiplier", "value": 2, "duration_seconds": 3600} # 1 hour
     },
     "power_prestige": {
         "item_id": "power_prestige", "name": "Power Prestige", "price": 500,
@@ -207,7 +207,7 @@ async def purchase_item(
     total_cost = item_to_buy.price * purchase_data.quantity
     
     # Check balance first, but will do atomic check during update
-    if current_user.hc_balance < total_cost:
+    if current_user.hp_score < total_cost:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin.")
 
     # --- Handle special instant-effect items ---
@@ -215,14 +215,14 @@ async def purchase_item(
         # Atomic deduction for special items with balance verification
         from beanie.operators import And
         update_result = await User.find_one(
-            And(User.id == current_user.id, User.hc_balance >= total_cost)
-        ).update(Inc({User.hc_balance: -total_cost}))
+            And(User.id == current_user.id, User.hp_score >= total_cost)
+        ).update(Inc({User.hp_score: -total_cost}))
         
         if not update_result:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin or concurrent purchase detected.")
         return {
             "message": f"Successfully activated {translated_item_name}!",
-            "new_balance": current_user.hc_balance - total_cost
+            "new_balance": current_user.hp_score - total_cost
         }
     
     # ### NEW ### --- Handle BUNDLE item type ---
@@ -254,9 +254,9 @@ async def purchase_item(
         # Atomically deduct cost and set new inventory with balance check
         from beanie.operators import And
         update_result = await User.find_one(
-            And(User.id == current_user.id, User.hc_balance >= total_cost)
+            And(User.id == current_user.id, User.hp_score >= total_cost)
         ).update(
-            Inc({User.hc_balance: -total_cost}),
+            Inc({User.hp_score: -total_cost}),
             Set({User.inventory: inventory_dicts})
         )
         
@@ -264,7 +264,7 @@ async def purchase_item(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient HustleCoin or concurrent purchase detected.")
         return {
             "message": f"Successfully purchased bundle: {translated_item_name}!",
-            "new_balance": current_user.hc_balance - total_cost
+            "new_balance": current_user.hp_score - total_cost
         }
 
     # --- Standard Item Purchase ---
@@ -287,9 +287,9 @@ async def purchase_item(
     # Atomic purchase with balance verification
     from beanie.operators import And
     update_result = await User.find_one(
-        And(User.id == current_user.id, User.hc_balance >= total_cost)
+        And(User.id == current_user.id, User.hp_score >= total_cost)
     ).update(
-        Inc({User.hc_balance: -total_cost}),
+        Inc({User.hp_score: -total_cost}),
         Set({User.inventory: inventory_dicts})
     )
     
@@ -298,5 +298,5 @@ async def purchase_item(
     
     return {
         "message": f"Successfully purchased {purchase_data.quantity} x {translated_item_name}!",
-        "new_balance": current_user.hc_balance - total_cost
+        "new_balance": current_user.hp_score - total_cost
     }

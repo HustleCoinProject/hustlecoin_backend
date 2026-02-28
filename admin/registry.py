@@ -665,7 +665,7 @@ def auto_register_models():
             User,
             verbose_name="User",
             verbose_name_plural="Users",
-            list_display=["username", "email", "hc_balance", "level", "current_hustle"],
+            list_display=["username", "email", "hp_score", "level", "current_hustle"],
             search_fields=["username", "email"],
             # Force readonly for dangerous fields - automatic safety system will handle the rest
             readonly_fields=[
@@ -730,7 +730,7 @@ def auto_register_models():
             ordering=["-created_at"],
             # CRITICAL: Financial data should be readonly - only status and admin fields can be edited
             readonly_fields=[
-                "id", "created_at", "updated_at", "user_id", "amount_hc", 
+                "id", "created_at", "updated_at", "user_id", "amount_hp", 
                 "amount_kwanza", "conversion_rate", "payout_method",
                 "phone_number", "full_name", "national_id", "crypto_wallet_address", "crypto_network"
             ],

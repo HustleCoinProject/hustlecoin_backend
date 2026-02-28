@@ -28,7 +28,7 @@ class PayoutMethodInfo(BaseModel):
 class PayoutOut(BaseModel):
     """Payout information for user display."""
     id: PydanticObjectId
-    amount_hc: int
+    amount_hp: int
     amount_kwanza: float
     payout_method: str
     status: str
@@ -76,7 +76,7 @@ class UserPayoutInfoUpdate(BaseModel):
 
 class PayoutRequest(BaseModel):
     """Request for creating a new payout."""
-    amount_hc: int = Field(..., gt=0)
+    amount_hp: int = Field(..., gt=0)
     payout_method: str = Field(..., pattern="^(multicaixa_express|crypto_transfer)$")
     
     # Multicaixa Express fields (required if method is multicaixa_express)
@@ -88,12 +88,12 @@ class PayoutRequest(BaseModel):
     crypto_wallet_address: str | None = None
     crypto_network: str | None = "Base"  # Default to Base as per requirements
 
-    @validator('amount_hc')
+    @validator('amount_hp')
     def validate_amount(cls, v):
-        if v < settings.MINIMUM_PAYOUT_HC:
-            raise ValueError(f'Minimum payout amount is {settings.MINIMUM_PAYOUT_HC} HC')
-        if v > settings.MAXIMUM_PAYOUT_HC:
-            raise ValueError(f'Maximum payout amount is {settings.MAXIMUM_PAYOUT_HC} HC')
+        if v < settings.MINIMUM_PAYOUT_HP:
+            raise ValueError(f'Minimum payout amount is {settings.MINIMUM_PAYOUT_HP} HP')
+        if v > settings.MAXIMUM_PAYOUT_HP:
+            raise ValueError(f'Maximum payout amount is {settings.MAXIMUM_PAYOUT_HP} HP')
         return v
 
     def validate_payout_fields(self):
@@ -142,14 +142,14 @@ def is_sunday_angola_time() -> bool:
         return angola_now.weekday() == 6
 
 
-def calculate_kwanza_amount(hc_amount: int) -> float:
-    """Convert HC to Kwanza based on current rate."""
-    return round(hc_amount / settings.PAYOUT_CONVERSION_RATE, 2)
+def calculate_kwanza_amount(hp_amount: int) -> float:
+    """Convert HP to Kwanza based on current rate."""
+    return round(hp_amount / settings.PAYOUT_CONVERSION_RATE, 2)
 
 
 def get_payout_methods() -> List[PayoutMethodInfo]:
     """Get available payout methods with their requirements."""
-    min_kwanza = calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC)
+    min_kwanza = calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HP)
     return [
         PayoutMethodInfo(
             method="multicaixa_express",
@@ -160,7 +160,7 @@ def get_payout_methods() -> List[PayoutMethodInfo]:
         ),
         PayoutMethodInfo(
             method="crypto_transfer",
-            name="Crypto Transfer (HC)",
+            name="Crypto Transfer (HP)",
             description="Transfer HustleCoin to your wallet on Base network",
             required_fields=["crypto_wallet_address"],
             min_amount_kwanza=min_kwanza
@@ -184,10 +184,10 @@ async def get_user_payout_info(current_user: User = Depends(get_current_verified
         full_name=current_user.full_name,
         national_id=current_user.national_id,
 
-        available_balance_hc=current_user.hc_balance,
-        available_balance_kwanza=calculate_kwanza_amount(current_user.hc_balance),
-        min_payout_hc=settings.MINIMUM_PAYOUT_HC,
-        min_payout_kwanza=calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC),
+        available_balance_hc=current_user.hp_score,
+        available_balance_kwanza=calculate_kwanza_amount(current_user.hp_score),
+        min_payout_hc=settings.MINIMUM_PAYOUT_HP,
+        min_payout_kwanza=calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HP),
         conversion_rate=settings.PAYOUT_CONVERSION_RATE
     )
 
@@ -228,10 +228,10 @@ async def update_payout_info(
         full_name=current_user.full_name,
         national_id=current_user.national_id,
 
-        available_balance_hc=current_user.hc_balance,
-        available_balance_kwanza=calculate_kwanza_amount(current_user.hc_balance),
-        min_payout_hc=settings.MINIMUM_PAYOUT_HC,
-        min_payout_kwanza=calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC),
+        available_balance_hc=current_user.hp_score,
+        available_balance_kwanza=calculate_kwanza_amount(current_user.hp_score),
+        min_payout_hc=settings.MINIMUM_PAYOUT_HP,
+        min_payout_kwanza=calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HP),
         conversion_rate=settings.PAYOUT_CONVERSION_RATE
     )
 
@@ -257,26 +257,26 @@ async def request_payout(
         raise HTTPException(status_code=400, detail=str(e))
     
     # Check if user has sufficient balance
-    if current_user.hc_balance < payout_request.amount_hc:
+    if current_user.hp_score < payout_request.amount_hp:
         raise HTTPException(
             status_code=400,
-            detail=f"Insufficient balance. Available: {current_user.hc_balance} HC, Requested: {payout_request.amount_hc} HC"
+            detail=f"Insufficient balance. Available: {current_user.hp_score} HP, Requested: {payout_request.amount_hp} HP"
         )
     
     # Check minimum payout amount
-    if payout_request.amount_hc < settings.MINIMUM_PAYOUT_HC:
-        min_kwanza = calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC)
+    if payout_request.amount_hp < settings.MINIMUM_PAYOUT_HP:
+        min_kwanza = calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HP)
         raise HTTPException(
             status_code=400,
-            detail=f"Minimum payout amount is {settings.MINIMUM_PAYOUT_HC} HC ({min_kwanza} Kwanza)"
+            detail=f"Minimum payout amount is {settings.MINIMUM_PAYOUT_HP} HP ({min_kwanza} Kwanza)"
         )
     
     # Check maximum payout amount
-    if payout_request.amount_hc > settings.MAXIMUM_PAYOUT_HC:
-        max_kwanza = calculate_kwanza_amount(settings.MAXIMUM_PAYOUT_HC)
+    if payout_request.amount_hp > settings.MAXIMUM_PAYOUT_HP:
+        max_kwanza = calculate_kwanza_amount(settings.MAXIMUM_PAYOUT_HP)
         raise HTTPException(
             status_code=400,
-            detail=f"Maximum payout amount is {settings.MAXIMUM_PAYOUT_HC} HC ({max_kwanza} Kwanza)"
+            detail=f"Maximum payout amount is {settings.MAXIMUM_PAYOUT_HP} HP ({max_kwanza} Kwanza)"
         )
     
     # Check for pending payouts (limit one pending payout per user)
@@ -292,12 +292,12 @@ async def request_payout(
         )
     
     # Calculate Kwanza amount
-    kwanza_amount = calculate_kwanza_amount(payout_request.amount_hc)
+    kwanza_amount = calculate_kwanza_amount(payout_request.amount_hp)
     
     # Create payout record
     payout = Payout(
         user_id=current_user.id,
-        amount_hc=payout_request.amount_hc,
+        amount_hp=payout_request.amount_hp,
         amount_kwanza=kwanza_amount,
         conversion_rate=settings.PAYOUT_CONVERSION_RATE,
         payout_method=payout_request.payout_method,
@@ -312,12 +312,12 @@ async def request_payout(
     
     await payout.create()
     
-    # Deduct HC from user balance
-    await current_user.update({"$inc": {"hc_balance": -payout_request.amount_hc}})
+    # Deduct HP from user balance
+    await current_user.update({"$inc": {"hp_score": -payout_request.amount_hp}})
     
     return PayoutOut(
         id=payout.id,
-        amount_hc=payout.amount_hc,
+        amount_hp=payout.amount_hp,
         amount_kwanza=payout.amount_kwanza,
         payout_method=payout.payout_method,
         status=payout.status,
@@ -343,7 +343,7 @@ async def get_payout_history(
     return [
         PayoutOut(
             id=payout.id,
-            amount_hc=payout.amount_hc,
+            amount_hp=payout.amount_hp,
             amount_kwanza=payout.amount_kwanza,
             payout_method=payout.payout_method,
             status=payout.status,
@@ -377,7 +377,7 @@ async def get_payout_details(
     
     return PayoutOut(
         id=payout.id,
-        amount_hc=payout.amount_hc,
+        amount_hp=payout.amount_hp,
         amount_kwanza=payout.amount_kwanza,
         payout_method=payout.payout_method,
         status=payout.status,
@@ -440,7 +440,7 @@ async def get_payout_system_status():
         "system_name": "HustleCoin Payout System",
         "status": "operational",
         "conversion_rate": settings.PAYOUT_CONVERSION_RATE,
-        "minimum_payout_hc": settings.MINIMUM_PAYOUT_HC,
-        "minimum_payout_kwanza": calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HC),
+        "minimum_payout_hp": settings.MINIMUM_PAYOUT_HP,
+        "minimum_payout_kwanza": calculate_kwanza_amount(settings.MINIMUM_PAYOUT_HP),
         "statistics": stats
     }

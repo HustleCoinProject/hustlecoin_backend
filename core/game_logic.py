@@ -39,7 +39,7 @@ class EffectProcessor:
         """
         now = datetime.utcnow()
         modifiers = {
-            'hc_multiplier': 1.0,
+            'hp_multiplier': 1.0,
             'land_income_multiplier': 1.0,
             'task_speed_multiplier': 1.0,
             'cooldown_reduction_percentage': 0.0,
@@ -68,12 +68,12 @@ class EffectProcessor:
 
 
 # Register all effect handlers
-@EffectProcessor.register_effect("hc_multiplier")
+@EffectProcessor.register_effect("hp_multiplier")
 def apply_hc_multiplier(modifiers: Dict[str, Any], item_config: Dict[str, Any], item, context: str, **kwargs):
-    """Multiplies HC rewards from tasks and tapping"""
+    """Multiplies HP rewards from tasks and tapping"""
     if context in ['task_reward', 'tapping_reward']:
         multiplier = item_config["metadata"].get("value", 1.0)
-        modifiers['hc_multiplier'] *= multiplier
+        modifiers['hp_multiplier'] *= multiplier
 
 @EffectProcessor.register_effect("land_income_multiplier")
 def apply_land_income_multiplier(modifiers: Dict[str, Any], item_config: Dict[str, Any], item, context: str, **kwargs):
@@ -128,19 +128,19 @@ class GameLogic:
 
         Args:
             user: The User document object.
-            base_reward: The base HC reward for the completed task.
+            base_reward: The base HP reward for the completed task.
 
         Returns:
-            The final, calculated HC reward as an integer.
+            The final, calculated HP reward as an integer.
         """
         modifiers = EffectProcessor.apply_effects(user, 'task_reward', base_reward=base_reward)
         
-        # Apply HC multiplier
-        modified_reward = float(base_reward) * modifiers['hc_multiplier']
+        # Apply HP multiplier
+        modified_reward = float(base_reward) * modifiers['hp_multiplier']
         
         # Apply flat bonuses if any
         for bonus_type, bonus_value in modifiers['flat_bonuses'].items():
-            if bonus_type == 'hc_flat_bonus':
+            if bonus_type == 'hp_flat_bonus':
                 modified_reward += bonus_value
         
         # Apply the user's level multiplier

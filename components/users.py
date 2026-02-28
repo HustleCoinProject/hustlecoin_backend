@@ -45,12 +45,12 @@ class UserOut(BaseModel):
     id: PydanticObjectId
     username: str
     email: EmailStr
-    hc_balance: int = 0
+    hp_score: int = 0
     rank_points: int = 0
     level: int = 1
     current_hustle: Dict[str, str]  # Changed to Dict[str, str] for localized key-value pair
     level_entry_date: datetime
-    hc_earned_in_level: int
+    hp_earned_in_level: int
     language: str
     task_cooldowns: Dict[str, datetime]
     daily_streak: int

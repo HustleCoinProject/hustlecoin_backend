@@ -20,7 +20,7 @@ EVENTS_CONFIG = {
         "entry_fee": 50,
         "name": "Daily Hustle",
         "description": "24 hours to prove you're the best!",
-        "rewards": {"1": 500, "2": 250, "3": 100} # Rank: HC Amount
+        "rewards": {"1": 500, "2": 250, "3": 100} # Rank: HP Amount
     },
     "event_2d": {
         "duration_days": 2,
@@ -165,13 +165,13 @@ async def join_event(
     if event_id in current_user.joined_events:
         raise HTTPException(status_code=400, detail="Already joined this event")
         
-    if current_user.hc_balance < config["entry_fee"]:
+    if current_user.hp_score < config["entry_fee"]:
         raise HTTPException(status_code=400, detail="Insufficient funds")
         
     # Deduct fee and mark as joined
     # We explicitly set rank points for this event to 0 to initialize it
     await current_user.update(
-        Inc({User.hc_balance: -config["entry_fee"]}),
+        Inc({User.hp_score: -config["entry_fee"]}),
         Set({
             f"joined_events.{event_id}": datetime.utcnow(),
             f"events_points.{event_id}": 0 
@@ -184,7 +184,7 @@ async def join_event(
     return JoinEventResponse(
         success=True,
         message=f"Successfully joined {config['name']}!",
-        new_balance=updated_user.hc_balance,
+        new_balance=updated_user.hp_score,
         event_id=event_id
     )
 

@@ -202,8 +202,8 @@ class Settings(BaseSettings):
     @property
     def PAYOUT_CONVERSION_RATE(self) -> float:
         return self.HC_TO_KZ_RATE
-    MINIMUM_PAYOUT_HC: int = 10000  # Minimum HC required for payout (10,000 HC = 1,000 Kwanza)
-    MAXIMUM_PAYOUT_HC: int = 30000  # Maximum HC allowed per payout (30,000 HC = 3,000 Kwanza)
+    MINIMUM_PAYOUT_HP: int = 10000  # Minimum HP required for payout (10,000 HP = 1,000 Kwanza)
+    MAXIMUM_PAYOUT_HP: int = 30000  # Maximum HP allowed per payout (30,000 HP = 3,000 Kwanza)
     
     # Redis configuration for rate limiting
     REDIS_URL: str = "redis://localhost:6379/0"

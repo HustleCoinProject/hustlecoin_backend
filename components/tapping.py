@@ -13,7 +13,7 @@ from core.game_logic import GameLogic
 router = APIRouter(prefix="/api/tapping", tags=["Tapping System"])
 
 # --- Configuration ---
-DAILY_TAP_LIMIT = 150  # Maximum HC that can be earned per day from tapping
+DAILY_TAP_LIMIT = 150  # Maximum HP that can be earned per day from tapping
 TAP_RESET_HOUR = 0  # Hour when daily limit resets (24-hour format, UTC)
 
 # --- DTOs (Data Transfer Objects) ---
@@ -23,7 +23,7 @@ class TapRequest(BaseModel):
 class TapResponse(BaseModel):
     success: bool
     message: str
-    hc_earned: int
+    hp_earned: int
     rank_points_earned: int
     new_balance: int
     new_rank_points: int
@@ -64,8 +64,8 @@ async def process_tap_batch(
     current_user: User = Depends(get_current_verified_user)
 ):
     """
-    Process a batch of taps and award HC based on daily limits.
-    Each tap awards 1 HC, but requests are processed in batches for efficiency.
+    Process a batch of taps and award HP based on daily limits.
+    Each tap awards 1 HP, but requests are processed in batches for efficiency.
     """
     
     today = date.today()
@@ -78,7 +78,7 @@ async def process_tap_batch(
         updates_to_set[User.daily_tap_earnings] = 0
         updates_to_set[User.last_tap_reset_date] = today
     
-    # Calculate how many HC can be earned
+    # Calculate how many HP can be earned
     remaining_limit = DAILY_TAP_LIMIT - current_user.daily_tap_earnings
     
     if remaining_limit <= 0:
@@ -94,17 +94,17 @@ async def process_tap_batch(
             }
         )
     
-    # Calculate actual HC to award (capped by remaining limit)
+    # Calculate actual HP to award (capped by remaining limit)
     base_hc_to_award = min(tap_request.tap_count, remaining_limit)
     
     if base_hc_to_award <= 0:
-        # No HC can be awarded
+        # No HP can be awarded
         next_reset_at = get_next_reset_time()
         return TapResponse(
             success=False,
             message="Daily tap limit reached. Try again tomorrow!",
-            hc_earned=0,
-            new_balance=current_user.hc_balance,
+            hp_earned=0,
+            new_balance=current_user.hp_score,
             daily_earnings=current_user.daily_tap_earnings,
             daily_limit=DAILY_TAP_LIMIT,
             remaining_taps=0,
@@ -137,8 +137,8 @@ async def process_tap_batch(
         )
     ).update(
         Inc({
-            User.hc_balance: final_hc_reward, 
-            User.hc_earned_in_level: final_hc_reward,
+            User.hp_score: final_hc_reward, 
+            User.hp_earned_in_level: final_hc_reward,
             User.rank_points: final_rank_points,
             **await GameLogic.get_event_point_increments(current_user, final_rank_points)
         }),
@@ -161,10 +161,10 @@ async def process_tap_batch(
     
     return TapResponse(
         success=True,
-        message=f"Successfully processed {tap_request.tap_count} taps! Earned {final_hc_reward} HC and {final_rank_points} rank points.",
-        hc_earned=final_hc_reward,
+        message=f"Successfully processed {tap_request.tap_count} taps! Earned {final_hc_reward} HP and {final_rank_points} rank points.",
+        hp_earned=final_hc_reward,
         rank_points_earned=final_rank_points,
-        new_balance=current_user.hc_balance + final_hc_reward,
+        new_balance=current_user.hp_score + final_hc_reward,
         new_rank_points=current_user.rank_points + final_rank_points,
         daily_earnings=new_daily_earnings,
         daily_limit=DAILY_TAP_LIMIT,

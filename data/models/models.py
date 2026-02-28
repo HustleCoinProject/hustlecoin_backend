@@ -26,9 +26,9 @@ class InventoryItem(BaseModel):
 
 
 class RewardItem(BaseModel):
-    """Represents a standard reward (HC, Item, etc) across the app."""
-    reward_type: str  # "HC", "ITEM"
-    hc_amount: int | None = None
+    """Represents a standard reward (HP, Item, etc) across the app."""
+    reward_type: str  # "HP", "ITEM"
+    hp_amount: int | None = None
     item_id: str | None = None
     item_name: str | None = None
     item_description: str | None = None
@@ -48,13 +48,13 @@ class User(Document):
     username: Annotated[str, IndexedField(unique=True)] = Field(..., min_length=3, max_length=30)
     email: Annotated[EmailStr, IndexedField(unique=True)] = Field(..., max_length=254)
     hashed_password: str
-    hc_balance: int = 0
+    hp_score: int = 0
     rank_points: Annotated[int, IndexedField()] = 0  # Points that reflect user's activity and importance
     inventory: List[InventoryItem] = Field(default_factory=list)
     level: int = 1
     current_hustle: str = "Street Vendor" # Default starting hustle
     level_entry_date: datetime = Field(default_factory=datetime.utcnow)
-    hc_earned_in_level: int = 0
+    hp_earned_in_level: int = 0
     language: str = "en"
     task_cooldowns: Dict[str, datetime] = Field(default_factory=dict) # e.g., {"daily_tap": datetime.utcnow()}
     
@@ -63,14 +63,14 @@ class User(Document):
     daily_streak: int = 0
     
     # For daily tap system
-    daily_tap_earnings: int = 0  # HC earned from taps today
+    daily_tap_earnings: int = 0  # HP earned from taps today
     last_tap_reset_date: date | None = None  # Last date when tap earnings were reset
     
     # For land income claiming system
     last_land_claim_at: datetime | None = None  # Last time user claimed land income
     
     # For safe lock system
-    safe_lock_amount: int = 0  # HC amount currently locked in safe
+    safe_lock_amount: int = 0  # HP amount currently locked in safe
     safe_lock_locked_until: datetime | None = None  # When the safe lock can be claimed
     
     # Payout information fields
@@ -138,9 +138,9 @@ class LandTile(Document):
 
 class Payout(Document):
     user_id: Annotated[PydanticObjectId, IndexedField()]
-    amount_hc: int  # Amount in HustleCoin
-    amount_kwanza: float  # Amount in Kwanza (HC / conversion_rate)
-    conversion_rate: float = 10.0  # Default: 1 Kwanza = 10 HC
+    amount_hp: int  # Amount in HustleCoin
+    amount_kwanza: float  # Amount in Kwanza (HP / conversion_rate)
+    conversion_rate: float = 10.0  # Default: 1 Kwanza = 10 HP
     
     # Payout method: "multicaixa_express" or "bank_transfer"
     payout_method: str

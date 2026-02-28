@@ -30,7 +30,6 @@ TASK_CONFIG = {
     "watch_ad": {"reward": 120, "rank_points": 1, "cooldown_seconds": 3600, "type": "INSTANT", "description": "Watch a video ad"},
     "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
     "quiz_game": {"reward": 40, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
-    "mini_game_played": {"reward": 10, "rank_points": 1, "cooldown_seconds": 30, "type": "INSTANT", "description": "Play a mini-game"},
     
     # Bundle Missions
     "mission_1": {"reward": 200, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 1"},
@@ -139,7 +138,7 @@ async def complete_task(
             new_streak = current_user.daily_streak
         # Otherwise, the streak resets to 1.
         
-        # Calculate streak bonus (e.g., 10 HC per day, capped at 7 days)
+        # Calculate streak bonus (e.g., 10 HP per day, capped at 7 days)
         streak_bonus = min(new_streak, 7) * 10
         base_reward_amount += streak_bonus # Add bonus to base reward
         
@@ -156,9 +155,6 @@ async def complete_task(
         # In a real app, you might have server-to-server ad validation logic here
         
     elif task_id == "daily_tap":
-        base_reward_amount = config["reward"]
-
-    elif task_id == "mini_game_played":
         base_reward_amount = config["reward"]
 
     elif task_id.startswith("mission_"):
@@ -226,14 +222,14 @@ async def complete_task(
         updates_to_set[f"task_cooldowns.{task_id}"] = cooldown_expiry
     
     # Capture original values before update to avoid double counting
-    original_balance = current_user.hc_balance
+    original_balance = current_user.hp_score
     original_rank_points = current_user.rank_points
 
     # Update user balance and rank points
     update_inc = {}
     if final_reward > 0:
-        update_inc[User.hc_balance] = final_reward
-        update_inc[User.hc_earned_in_level] = final_reward
+        update_inc[User.hp_score] = final_reward
+        update_inc[User.hp_earned_in_level] = final_reward
     if final_rank_points > 0:
         update_inc[User.rank_points] = final_rank_points
         

@@ -109,7 +109,7 @@ async def buy_land_tile(
     if not h3.is_valid_cell(h3_index):
         raise HTTPException(status_code=400, detail="Invalid H3 tile index.")
 
-    if current_user.hc_balance < settings.LAND_PRICE:
+    if current_user.hp_score < settings.LAND_PRICE:
         raise HTTPException(status_code=402, detail="Insufficient HustleCoin to buy land.")
 
     # Check land purchase limit (5 * level)
@@ -136,7 +136,7 @@ async def buy_land_tile(
     # Deduct balance and update rank points
     await current_user.update(
         Inc({
-            User.hc_balance: -settings.LAND_PRICE,
+            User.hp_score: -settings.LAND_PRICE,
             User.rank_points: land_purchase_rank_points
         })
     )
@@ -167,7 +167,7 @@ async def buy_land_tile(
         # If insert fails (e.g., duplicate key), refund the user
         await current_user.update(
             Inc({
-                User.hc_balance: settings.LAND_PRICE,
+                User.hp_score: settings.LAND_PRICE,
                 User.rank_points: -land_purchase_rank_points
             })
         )
@@ -179,7 +179,7 @@ async def buy_land_tile(
     return {
         "message": f"Land purchased successfully! Earned {land_purchase_rank_points} rank points.", 
         "h3_index": h3_index, 
-        "new_balance": current_user.hc_balance - settings.LAND_PRICE,
+        "new_balance": current_user.hp_score - settings.LAND_PRICE,
         "rank_points_earned": land_purchase_rank_points,
         "new_rank_points": current_user.rank_points + land_purchase_rank_points
     }
@@ -198,9 +198,9 @@ async def sell_land_tile(h3_index: str, current_user: User = Depends(get_current
 
     # Atomically delete the tile and credit the user's account
     await tile_to_sell.delete()
-    await current_user.update(Inc({User.hc_balance: settings.LAND_SELL_PRICE}))
+    await current_user.update(Inc({User.hp_score: settings.LAND_SELL_PRICE}))
 
-    return {"message": "Land sold successfully!", "h3_index": h3_index, "new_balance": current_user.hc_balance + settings.LAND_SELL_PRICE}
+    return {"message": "Land sold successfully!", "h3_index": h3_index, "new_balance": current_user.hp_score + settings.LAND_SELL_PRICE}
 
 
 @router.post("/claim-income", response_model=LandIncomeClaimResponse)
@@ -214,9 +214,9 @@ async def claim_land_income(current_user: User = Depends(get_current_verified_us
     - If False: Fixed daily amount regardless of wait time (default)
     
     FIRST CLAIM BONUS: For users who have never claimed land income before,
-    they will always receive at least the full daily amount (50 HC per tile)
+    they will always receive at least the full daily amount (50 HP per tile)
     regardless of how long they've owned the land. This prevents users from
-    getting tiny amounts (e.g., 1 HC) on their first claim and then being
+    getting tiny amounts (e.g., 1 HP) on their first claim and then being
     locked out for 24 hours.
     """
     now = datetime.utcnow()
@@ -294,7 +294,7 @@ async def claim_land_income(current_user: User = Depends(get_current_verified_us
     
     # Update user's balance, level earnings, and last claim time
     await current_user.update(
-        Inc({User.hc_balance: total_income, User.hc_earned_in_level: total_income}),
+        Inc({User.hp_score: total_income, User.hp_earned_in_level: total_income}),
         Set({User.last_land_claim_at: now})
     )
     
@@ -305,7 +305,7 @@ async def claim_land_income(current_user: User = Depends(get_current_verified_us
         message=f"Successfully claimed {total_income} HustleCoin from {tiles_processed} land tiles!",
         total_income=total_income,
         tiles_processed=tiles_processed,
-        new_balance=current_user.hc_balance + total_income,
+        new_balance=current_user.hp_score + total_income,
         next_claim_available_at=next_claim_available_at
     )
 
@@ -321,7 +321,7 @@ async def get_land_income_status(current_user: User = Depends(get_current_verifi
     - If False: Shows max one day's worth of income (default)
     
     FIRST CLAIM BONUS: For users who have never claimed before, the available
-    income will show at least the full daily amount (50 HC per tile) to
+    income will show at least the full daily amount (50 HP per tile) to
     ensure a good first-time user experience.
     """
     now = datetime.utcnow()

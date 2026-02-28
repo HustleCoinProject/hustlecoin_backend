@@ -89,7 +89,7 @@ async def process_payout(
         print(f"Payout not found: {payout_id}")
         raise HTTPException(status_code=404, detail="Payout not found")
     
-    print(f"Found payout: ID={payout.id}, status={payout.status}, amount_hc={payout.amount_hc}")
+    print(f"Found payout: ID={payout.id}, status={payout.status}, amount_hp={payout.amount_hp}")
     
     if payout.status != "pending":
         print(f"Payout is not in pending status. Current status: {payout.status}")
@@ -100,7 +100,7 @@ async def process_payout(
         print(f"User not found: {payout.user_id}")
         raise HTTPException(status_code=404, detail="User not found")
     
-    print(f"Found user: ID={user.id}, hc_balance={user.hc_balance}")
+    print(f"Found user: ID={user.id}, hp_score={user.hp_score}")
     
     now = datetime.utcnow()
     
@@ -118,7 +118,7 @@ async def process_payout(
         notification = Notification(
             user_id=user.id,
             title="Payout Approved!",
-            message=f"Your payout request for {payout.amount_hc} HC has been approved and processed.",
+            message=f"Your payout request for {payout.amount_hp} HP has been approved and processed.",
             type="payout_status",
             metadata={"payout_id": str(payout.id), "status": "completed"}
         )
@@ -126,8 +126,8 @@ async def process_payout(
         print(f"Notification created for user {user.id}")
     
     elif action == "reject":
-        print(f"Rejecting payout: {payout_id}, returning {payout.amount_hc} HC to user {user.id}")
-        # Reject payout and return HC to user
+        print(f"Rejecting payout: {payout_id}, returning {payout.amount_hp} HP to user {user.id}")
+        # Reject payout and return HP to user
         payout.status = "rejected"
         payout.processed_by = admin_username
         payout.processed_at = now
@@ -135,19 +135,19 @@ async def process_payout(
         if admin_notes:
             payout.admin_notes = admin_notes
         
-        # Return HC to user balance
-        old_balance = user.hc_balance
-        await user.update({"$inc": {"hc_balance": payout.amount_hc}})
+        # Return HP to user balance
+        old_balance = user.hp_score
+        await user.update({"$inc": {"hp_score": payout.amount_hp}})
         
         # Refresh user to verify balance update
         updated_user = await User.get(user.id)
-        print(f"Balance updated: {old_balance} -> {updated_user.hc_balance} (+{payout.amount_hc} HC)")
+        print(f"Balance updated: {old_balance} -> {updated_user.hp_score} (+{payout.amount_hp} HP)")
         
         # Create notification for user
         notification = Notification(
             user_id=user.id,
             title="Payout Rejected",
-            message=f"Your payout request for {payout.amount_hc} HC was rejected. Reason: {payout.rejection_reason}. The amount has been returned to your balance.",
+            message=f"Your payout request for {payout.amount_hp} HP was rejected. Reason: {payout.rejection_reason}. The amount has been returned to your balance.",
             type="payout_status",
             metadata={"payout_id": str(payout.id), "status": "rejected"}
         )
@@ -177,11 +177,11 @@ async def get_payout_statistics() -> Dict[str, Any]:
     
     # Total amounts
     completed_payouts = await Payout.find({"status": "completed"}).to_list()
-    stats["total_completed_hc"] = sum(p.amount_hc for p in completed_payouts)
+    stats["total_completed_hp"] = sum(p.amount_hp for p in completed_payouts)
     stats["total_completed_kwanza"] = sum(p.amount_kwanza for p in completed_payouts)
     
     pending_payouts = await Payout.find({"status": "pending"}).to_list()
-    stats["pending_total_hc"] = sum(p.amount_hc for p in pending_payouts)
+    stats["pending_total_hp"] = sum(p.amount_hp for p in pending_payouts)
     stats["pending_total_kwanza"] = sum(p.amount_kwanza for p in pending_payouts)
     
     return stats
@@ -203,7 +203,7 @@ async def get_pending_payouts_for_csv() -> List[Dict[str, Any]]:
             "payout_id": str(payout.id),
             "user_id": str(payout.user_id),
             "username": username,
-            "amount_hc": payout.amount_hc,
+            "amount_hp": payout.amount_hp,
             "amount_kwanza": payout.amount_kwanza,
             "payout_method": payout.payout_method,
             "phone_number": payout.phone_number or "",

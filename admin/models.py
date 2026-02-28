@@ -44,7 +44,7 @@ class PayoutCSVExportRow(BaseModel):
     payout_id: str
     user_id: str
     username: str
-    amount_hc: int
+    amount_hp: int
     amount_kwanza: float
     payout_method: str
     phone_number: str = ""

@@ -17,7 +17,7 @@ class LeaderboardEntry(BaseModel):
     rank_points: int = 0  # Default to 0 for existing users without this field
     level: int
     current_hustle: str
-    hc_balance: int = 0  # Default to 0 if not present
+    hp_score: int = 0  # Default to 0 if not present
 
 class HistoryWeek(BaseModel):
     id: str
@@ -38,7 +38,7 @@ async def _fetch_fresh_leaderboard() -> List[LeaderboardEntry]:
                 "rank_points": 1,
                 "level": 1,
                 "current_hustle": 1,
-                "hc_balance": 1
+                "hp_score": 1
             }
         }
     ]
@@ -53,7 +53,7 @@ async def _fetch_fresh_leaderboard() -> List[LeaderboardEntry]:
             rank_points=doc.get("rank_points", 0),
             level=doc["level"],
             current_hustle=doc.get("current_hustle", "Street Vendor"),
-            hc_balance=doc.get("hc_balance", 0)
+            hp_score=doc.get("hp_score", 0)
         )
         for doc in results
     ]
@@ -96,7 +96,7 @@ async def get_history_detail(history_id: str):
             rank_points=e.get("rank_points", 0),
             level=e.get("level", 1),
             current_hustle=e.get("current_hustle", "Street Vendor"),
-            hc_balance=e.get("hc_balance", 0)
+            hp_score=e.get("hp_score", 0)
         )
         for e in history.entries
     ]

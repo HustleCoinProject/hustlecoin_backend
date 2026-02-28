@@ -24,10 +24,10 @@ HUSTLE_CONFIG: Dict[int, List[str]] = {
 
 LEVEL_REQUIREMENTS: Dict[int, Dict[str, int]] = {
     # Key is the level you are trying to upgrade TO (so key 2 is for upgrading from 1 to 2)
-    2: {"days_in_level": 3, "hc_earned": 1000, "upgrade_fee": 2000},    # Fee increased 500 -> 2000
-    3: {"days_in_level": 5, "hc_earned": 5000, "upgrade_fee": 10000},   # Fee increased 2500 -> 10000
-    4: {"days_in_level": 7, "hc_earned": 20000, "upgrade_fee": 50000},  # Fee increased 10000 -> 50000
-    5: {"days_in_level": 10, "hc_earned": 100000, "upgrade_fee": 200000}, # Fee increased 50000 -> 200000
+    2: {"days_in_level": 3, "hp_earned": 1000, "upgrade_fee": 2000},    # Fee increased 500 -> 2000
+    3: {"days_in_level": 5, "hp_earned": 5000, "upgrade_fee": 10000},   # Fee increased 2500 -> 10000
+    4: {"days_in_level": 7, "hp_earned": 20000, "upgrade_fee": 50000},  # Fee increased 10000 -> 50000
+    5: {"days_in_level": 10, "hp_earned": 100000, "upgrade_fee": 200000}, # Fee increased 50000 -> 200000
 }
 
 # --- DTOs (Data Transfer Objects) ---
@@ -39,8 +39,8 @@ class LevelStatusResponse(BaseModel):
     current_hustle: Dict[str, str]  # Changed from str to Dict[str, str] for key-value pair
     days_in_level_progress: float # e.g., 2.5
     days_in_level_required: int
-    hc_earned_in_level_progress: int
-    hc_earned_in_level_required: int
+    hp_earned_in_level_progress: int
+    hp_earned_in_level_required: int
     upgrade_fee: int
     is_eligible_for_upgrade: bool
 
@@ -112,8 +112,8 @@ async def get_level_status(current_user: User = Depends(get_current_verified_use
             current_level=current_user.level,
             current_hustle=current_hustle_localized,
             days_in_level_progress=0, days_in_level_required=0,
-            hc_earned_in_level_progress=current_user.hc_earned_in_level,
-            hc_earned_in_level_required=0,
+            hp_earned_in_level_progress=current_user.hp_earned_in_level,
+            hp_earned_in_level_required=0,
             upgrade_fee=0, is_eligible_for_upgrade=False
         )
     
@@ -121,18 +121,18 @@ async def get_level_status(current_user: User = Depends(get_current_verified_use
     days_in_level = (datetime.utcnow() - current_user.level_entry_date).total_seconds() / (24 * 3600)
     
     days_req_met = days_in_level >= requirements["days_in_level"]
-    hc_earned_req_met = current_user.hc_earned_in_level >= requirements["hc_earned"]
-    fee_req_met = current_user.hc_balance >= requirements["upgrade_fee"]
+    hp_earned_req_met = current_user.hp_earned_in_level >= requirements["hp_earned"]
+    fee_req_met = current_user.hp_score >= requirements["upgrade_fee"]
 
     return LevelStatusResponse(
         current_level=current_user.level,
         current_hustle=current_hustle_localized,
         days_in_level_progress=round(days_in_level, 2),
         days_in_level_required=requirements["days_in_level"],
-        hc_earned_in_level_progress=current_user.hc_earned_in_level,
-        hc_earned_in_level_required=requirements["hc_earned"],
+        hp_earned_in_level_progress=current_user.hp_earned_in_level,
+        hp_earned_in_level_required=requirements["hp_earned"],
         upgrade_fee=requirements["upgrade_fee"],
-        is_eligible_for_upgrade=(days_req_met and hc_earned_req_met and fee_req_met)
+        is_eligible_for_upgrade=(days_req_met and hp_earned_req_met and fee_req_met)
     )
 
 
@@ -157,12 +157,12 @@ async def upgrade_user_level(current_user: User = Depends(get_current_verified_u
     new_hustle_localized = {new_hustle: translate_text(new_hustle, current_user.language)}
     
     await current_user.update(
-        Inc({User.hc_balance: -upgrade_fee}),
+        Inc({User.hp_score: -upgrade_fee}),
         Set({
             User.level: next_level,
             User.current_hustle: new_hustle,
             User.level_entry_date: datetime.utcnow(),
-            User.hc_earned_in_level: 0 # Reset the earnings counter
+            User.hp_earned_in_level: 0 # Reset the earnings counter
         })
     )
     

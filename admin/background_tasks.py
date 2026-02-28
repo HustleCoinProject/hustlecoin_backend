@@ -82,7 +82,7 @@ async def reset_all_rank_points():
         if top_users:
             from data.models import PendingReward, RewardItem
             
-            # Reward: Half of rank_points as HC (integer division)
+            # Reward: Half of rank_points as HP (integer division)
             for rank, user in enumerate(top_users, start=1):
                 if user.rank_points > 0:
                     reward_hc = user.rank_points // 2  # Integer division for half
@@ -91,8 +91,8 @@ async def reset_all_rank_points():
                     pending_reward = PendingReward(
                         source="Weekly Leaderboard",
                         reward=RewardItem(
-                            reward_type="HC",
-                            hc_amount=reward_hc
+                            reward_type="HP",
+                            hp_amount=reward_hc
                         )
                     )
                     
@@ -102,7 +102,7 @@ async def reset_all_rank_points():
                     
                     logger.info(
                         f"[RANK RESET] Rank #{rank}: {user.username} "
-                        f"(rank_points: {user.rank_points}) queued {reward_hc} HC reward"
+                        f"(rank_points: {user.rank_points}) queued {reward_hc} HP reward"
                     )
         else:
             logger.info("[RANK RESET] No users with rank_points > 0, skipping rewards")

@@ -35,11 +35,11 @@ class SafeLockStatusOut(BaseModel):
     is_locked: bool
     can_claim: bool
     time_remaining_seconds: float | None = None
-    total_safe_lock_global: int = Field(..., description="Total HC locked in safe by all users globally")
+    total_safe_lock_global: int = Field(..., description="Total HP locked in safe by all users globally")
 
 class SafeLockDepositRequest(BaseModel):
-    """Request body for depositing HC to safe lock."""
-    amount: int = Field(..., gt=0, description="Amount of HC to deposit (must be positive)")
+    """Request body for depositing HP to safe lock."""
+    amount: int = Field(..., gt=0, description="Amount of HP to deposit (must be positive)")
 
 class SafeLockDepositResponse(BaseModel):
     """Response for safe lock deposit endpoint."""
@@ -62,7 +62,7 @@ class SafeLockClaimResponse(BaseModel):
 
 class SafeLockGlobalStatsOut(BaseModel):
     """Response for global safe lock statistics (public endpoint)."""
-    total_safe_lock_global: int = Field(..., description="Total HC locked in safe by all users")
+    total_safe_lock_global: int = Field(..., description="Total HP locked in safe by all users")
     total_users_with_safe_lock: int = Field(..., description="Number of users with active safe locks")
     average_safe_lock_amount: float = Field(..., description="Average safe lock amount per user (excluding users with 0)")
 
@@ -123,7 +123,7 @@ async def _fetch_aggregate_stats() -> SafeLockAggregateStats:
 
 
 async def get_total_safe_lock_amount() -> int:
-    """Calculate total HC locked in safe across all users (uses cached aggregated data)."""
+    """Calculate total HP locked in safe across all users (uses cached aggregated data)."""
     stats = await safe_lock_global_cache.get_or_fetch(_fetch_aggregate_stats)
     return stats.total_safe_lock_amount
 
@@ -131,10 +131,10 @@ async def get_total_safe_lock_amount() -> int:
 async def calculate_safe_lock_reward(user: User) -> RewardItem:
     """
     Calculate reward based on user's rank points and safe lock amount relative to all other users.
-    Ensures minimum 30 HC reward if calculation yields less.
+    Ensures minimum 30 HP reward if calculation yields less.
     Uses cached aggregated statistics for memory-efficient performance.
     
-    Returns a RewardItem with either HC or an item from shop.
+    Returns a RewardItem with either HP or an item from shop.
     """
     # Get aggregated statistics (cached, memory-efficient)
     stats = await safe_lock_global_cache.get_or_fetch(_fetch_aggregate_stats)
@@ -156,20 +156,20 @@ async def calculate_safe_lock_reward(user: User) -> RewardItem:
     # Combined weight (average of both percentages)
     combined_weight = (rank_percentage + safe_lock_percentage) / 2
     
-    # Base reward calculation: scale from 30 to 500 HC based on weight
-    # Top users (100% weight) get up to 500 HC, minimum is 30 HC
+    # Base reward calculation: scale from 30 to 500 HP based on weight
+    # Top users (100% weight) get up to 500 HP, minimum is 30 HP
     base_reward_hc = int(30 + (combined_weight * 470))
     
-    # Add bonus based on absolute safe lock amount (every 100 HC locked adds 5 HC reward)
+    # Add bonus based on absolute safe lock amount (every 100 HP locked adds 5 HP reward)
     amount_bonus = int(user.safe_lock_amount / 100) * 5
     
-    # Calculate final HC reward
+    # Calculate final HP reward
     total_hc_reward = base_reward_hc + amount_bonus
     
-    # Ensure minimum 30 HC
+    # Ensure minimum 30 HP
     total_hc_reward = max(30, total_hc_reward)
     
-    # Determine if user gets an item or just HC
+    # Determine if user gets an item or just HP
     # Higher combined weight = higher chance of getting items
     # Users with weight > 0.1 (top 10% activity) have chance for items
     
@@ -194,10 +194,10 @@ async def calculate_safe_lock_reward(user: User) -> RewardItem:
             quantity=1
         )
     else:
-        # Return HC reward
+        # Return HP reward
         return RewardItem(
-            reward_type="HC",
-            hc_amount=total_hc_reward
+            reward_type="HP",
+            hp_amount=total_hc_reward
         )
 
 
@@ -262,16 +262,16 @@ async def deposit_to_safe_lock(
     current_user: User = Depends(get_current_verified_user)
 ):
     """
-    Deposit HC to safe lock. Funds will be locked for 7 days.
+    Deposit HP to safe lock. Funds will be locked for 7 days.
     If depositing again before 7 days, the timer resets to 7 days from now.
     """
     amount = deposit_request.amount
     
     # Check if user has enough balance
-    if current_user.hc_balance < amount:
+    if current_user.hp_score < amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Insufficient HC balance"
+            detail="Insufficient HP balance"
         )
     
     # Calculate new lock time (7 days from now)
@@ -279,7 +279,7 @@ async def deposit_to_safe_lock(
     
     # Update user: deduct from balance, add to safe lock, update lock time
     await current_user.update(
-        Inc({User.hc_balance: -amount, User.safe_lock_amount: amount}),
+        Inc({User.hp_score: -amount, User.safe_lock_amount: amount}),
         Set({User.safe_lock_locked_until: new_locked_until})
     )
     
@@ -288,8 +288,8 @@ async def deposit_to_safe_lock(
     
     return SafeLockDepositResponse(
         success=True,
-        message="HC deposited to safe lock successfully. Funds will be available in 7 days.",
-        new_balance=current_user.hc_balance,
+        message="HP deposited to safe lock successfully. Funds will be available in 7 days.",
+        new_balance=current_user.hp_score,
         safe_lock_amount=current_user.safe_lock_amount,
         locked_until=new_locked_until
     )
@@ -330,9 +330,9 @@ async def claim_safe_lock(
     
     # Calculate total amount to add to balance (principal + reward)
     returned_amount = current_user.safe_lock_amount
-    hc_increase = returned_amount
-    if reward.reward_type == "HC":
-        hc_increase += reward.hc_amount
+    hp_increase = returned_amount
+    if reward.reward_type == "HP":
+        hp_increase += reward.hp_amount
     
     # Prepare update operations
     # specific_ops = {}
@@ -373,10 +373,10 @@ async def claim_safe_lock(
                 User.safe_lock_locked_until: None,
                 User.inventory: updated_inventory
             }),
-            Inc({User.hc_balance: hc_increase})
+            Inc({User.hp_score: hp_increase})
         )
     else:
-        # Standard HC reward update
+        # Standard HP reward update
         # Atomically update user: Set safe lock to 0, Add balance
         update_result = await User.find_one(
             And(User.id == current_user.id, User.safe_lock_amount > 0)
@@ -385,7 +385,7 @@ async def claim_safe_lock(
                 User.safe_lock_amount: 0,
                 User.safe_lock_locked_until: None
             }),
-            Inc({User.hc_balance: hc_increase})
+            Inc({User.hp_score: hp_increase})
         )
     
     if not update_result:
@@ -402,6 +402,6 @@ async def claim_safe_lock(
         message="Safe lock claimed successfully!",
         returned_amount=returned_amount,
         reward=reward,
-        new_balance=current_user.hc_balance,
+        new_balance=current_user.hp_score,
         new_safe_lock_amount=current_user.safe_lock_amount
     )
