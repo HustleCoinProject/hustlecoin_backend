@@ -62,6 +62,14 @@ class User(Document):
     last_check_in_date: date | None = None # Store only the date, not datetime
     daily_streak: int = 0
     
+    # Energy and Activity Systems
+    energy: int = 100
+    max_energy: int = 100
+    energy_updated_at: datetime = Field(default_factory=datetime.utcnow)
+    activity: int = 0
+    max_activity: int = 100
+    activity_updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
     # For daily tap system
     daily_tap_earnings: int = 0  # HP earned from taps today
     last_tap_reset_date: date | None = None  # Last date when tap earnings were reset

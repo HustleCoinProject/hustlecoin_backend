@@ -121,6 +121,53 @@ class GameLogic:
     """
     
     @staticmethod
+    async def update_energy_and_activity(user: User) -> bool:
+        """
+        Calculates and applies passive energy regeneration and activity decay.
+        Returns True if the user was updated, False otherwise.
+        Note: The caller MUST save the user to the database if this returns True.
+        
+        Args:
+            user: The User document object to update.
+        """
+        now = datetime.utcnow()
+        updated = False
+        
+        # --- Energy Regeneration ---
+        # 1 Energy per minute
+        if user.energy < user.max_energy:
+            time_since_energy = (now - user.energy_updated_at).total_seconds()
+            minutes_passed = int(time_since_energy // 60)
+            
+            if minutes_passed > 0:
+                energy_to_add = minutes_passed * 1
+                new_energy = min(user.max_energy, user.energy + energy_to_add)
+                
+                if new_energy != user.energy:
+                    user.energy = new_energy
+                    # Advance the updated_at by the exact number of minutes processed 
+                    # so we don't lose fractional minutes
+                    user.energy_updated_at = user.energy_updated_at + timedelta(minutes=minutes_passed)
+                    updated = True
+        
+        # --- Activity Decay ---
+        # -2 Activity per 24 hours (86400 seconds)
+        if user.activity > 0:
+            time_since_activity = (now - user.activity_updated_at).total_seconds()
+            days_passed = int(time_since_activity // 86400)
+            
+            if days_passed > 0:
+                activity_to_remove = days_passed * 2
+                new_activity = max(0, user.activity - activity_to_remove)
+                
+                if new_activity != user.activity:
+                    user.activity = new_activity
+                    user.activity_updated_at = user.activity_updated_at + timedelta(days=days_passed)
+                    updated = True
+                    
+        return updated
+    
+    @staticmethod
     async def calculate_task_reward(user: User, base_reward: int) -> int:
         """
         Calculates the final reward for a task after applying all active

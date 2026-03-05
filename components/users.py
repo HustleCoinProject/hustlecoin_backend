@@ -59,6 +59,12 @@ class UserOut(BaseModel):
     last_land_claim_at: datetime | None = None
     safe_lock_amount: int = 0
     safe_lock_locked_until: datetime | None = None
+    energy: int
+    max_energy: int
+    energy_updated_at: datetime
+    activity: int
+    max_activity: int
+    activity_updated_at: datetime
     createdAt: datetime
 
 class UserRegister(BaseModel):
@@ -266,6 +272,10 @@ async def refresh_access_token(refresh_data: RefreshTokenRequest):
 
 @router.get("/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):
+    # Lazily update energy and activity upon fetch
+    if await GameLogic.update_energy_and_activity(current_user):
+        await current_user.save()
+        
     return _create_user_out_response(current_user)
 
 

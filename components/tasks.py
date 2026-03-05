@@ -24,18 +24,18 @@ quiz_cache = SimpleCache[List[Quiz]](ttl_seconds=3600)
 # 'rank_points' represent user activity and engagement - they don't decrease on purchases
 TASK_CONFIG = {
     # Daily login thing (idk that star feature that increases streak)
-    "daily_check_in": {"reward": 30, "rank_points": 3, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus"},
+    "daily_check_in": {"reward": 30, "rank_points": 3, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily Check-In & Streak Bonus", "energy_cost": 0, "activity_reward": 1},
 
     # Daily tasks thing
-    "watch_ad": {"reward": 120, "rank_points": 1, "cooldown_seconds": 3600, "type": "INSTANT", "description": "Watch a video ad"},
-    "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus"},
-    "quiz_game": {"reward": 40, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question"},
+    "watch_ad": {"reward": 120, "rank_points": 1, "cooldown_seconds": 3600, "type": "INSTANT", "description": "Watch a video ad", "energy_cost": 10, "activity_reward": 1},
+    "daily_tap": {"reward": 50, "rank_points": 2, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Daily login bonus", "energy_cost": 10, "activity_reward": 1},
+    "quiz_game": {"reward": 40, "rank_points": 4, "cooldown_seconds": 300, "type": "QUIZ", "description": "Answer a quiz question", "energy_cost": 5, "activity_reward": 1},
     
     # Bundle Missions
-    "mission_1": {"reward": 200, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 1"},
-    "mission_2": {"reward": 250, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 2"},
-    "mission_3": {"reward": 300, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 3"},
-    "mission_4": {"reward": 350, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 4"},
+    "mission_1": {"reward": 200, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 1", "energy_cost": 20, "activity_reward": 1},
+    "mission_2": {"reward": 250, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 2", "energy_cost": 20, "activity_reward": 1},
+    "mission_3": {"reward": 300, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 3", "energy_cost": 20, "activity_reward": 1},
+    "mission_4": {"reward": 350, "rank_points": 10, "cooldown_seconds": 86400, "type": "INSTANT", "description": "Complete Mission 4", "energy_cost": 20, "activity_reward": 1},
 }
 
 
@@ -47,6 +47,8 @@ class TaskInfo(BaseModel):
     rank_points: int
     type: str
     cooldown_seconds: int
+    energy_cost: int
+    activity_reward: int
 
 
 class TaskComplete(BaseModel):
@@ -61,6 +63,8 @@ class BalanceUpdateResponse(BaseModel):
     new_rank_points: int
     rank_points_earned: int
     cooldown_expires_at: datetime | None = None
+    new_energy: int
+    new_activity: int
 
 
 class TaskStatus(BaseModel):
@@ -70,6 +74,8 @@ class TaskStatus(BaseModel):
     rank_points: int
     type: str
     cooldown_seconds: int
+    energy_cost: int
+    activity_reward: int
     is_available: bool
     cooldown_expires_at: datetime | None = None
     seconds_until_available: int | None = None
@@ -120,6 +126,45 @@ async def complete_task(
 
     base_reward_amount = 0
     updates_to_set = {}
+    
+    # --- Energy and Activity Logic ---
+    energy_activity_updated = await GameLogic.update_energy_and_activity(current_user)
+    
+    energy_cost = config.get("energy_cost", 0)
+    if current_user.energy < energy_cost:
+        # If we failed due to energy but passive regen happened, we still want to save the passive regen
+        if energy_activity_updated:
+            regen_updates = {
+                User.energy: current_user.energy,
+                User.energy_updated_at: current_user.energy_updated_at,
+                User.activity: current_user.activity,
+                User.activity_updated_at: current_user.activity_updated_at
+            }
+            await current_user.update(Set(regen_updates))
+            
+        raise HTTPException(status_code=400, detail="Not enough energy to complete this task.")
+        
+    activity_reward = config.get("activity_reward", 0)
+    
+    now = datetime.utcnow()
+    
+    if energy_cost > 0:
+        current_user.energy -= energy_cost
+        current_user.energy_updated_at = now
+        
+    if activity_reward > 0:
+        current_user.activity = min(current_user.max_activity, current_user.activity + activity_reward)
+        current_user.activity_updated_at = now
+    
+    # Queue up the energy and activity changes for the final DB update
+    updates_to_set[User.energy] = current_user.energy
+    updates_to_set[User.activity] = current_user.activity
+    
+    # Always save timestamps if they were touched by passive regen or by this task
+    if energy_activity_updated or energy_cost > 0:
+        updates_to_set[User.energy_updated_at] = current_user.energy_updated_at
+    if energy_activity_updated or activity_reward > 0:
+        updates_to_set[User.activity_updated_at] = current_user.activity_updated_at
 
     # --- Task-specific Logic ---
     base_rank_points = config.get("rank_points", 0)
@@ -249,7 +294,9 @@ async def complete_task(
         new_balance=original_balance + final_reward,
         new_rank_points=original_rank_points + final_rank_points,
         rank_points_earned=final_rank_points,
-        cooldown_expires_at=cooldown_expiry
+        cooldown_expires_at=cooldown_expiry,
+        new_energy=current_user.energy,
+        new_activity=current_user.activity
     )
 
 
@@ -303,6 +350,8 @@ async def get_task_status(current_user: User = Depends(get_current_verified_user
             rank_points=config["rank_points"],
             type=config["type"],
             cooldown_seconds=config["cooldown_seconds"],
+            energy_cost=config.get("energy_cost", 0),
+            activity_reward=config.get("activity_reward", 0),
             is_available=is_available,
             cooldown_expires_at=cooldown_expires_at,
             seconds_until_available=seconds_until_available
